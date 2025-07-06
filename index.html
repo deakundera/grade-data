@@ -1,4 +1,796 @@
-<!DOCTYPE html>
+var studentCount = Object.keys(studentByNumber).length;
+                    console.log('로드된 학생 수:', studentCount);
+                    
+                    isDataLoaded = studentCount > 0;
+                    
+                    if (isDataLoaded) {
+                        updateDataStatus('✅ 성적 데이터가 준비되었습니다!', true, data.lastUpdated);
+                        console.log('데이터 로드 성공!');
+                    } else {
+                        updateDataStatus('업로드된 데이터가 비어있습니다. 관리자에게 문의하세요.');
+                        console.log('데이터는 있지만 학생 정보가 없음');
+                    }
+                    
+                    updateStudentTab();
+                    return true;
+                })
+                .catch(error => {
+                    console.error('데이터 로드 실패:', error);
+                    updateDataStatus('데이터 로드 실패: ' + error.message);
+                    isDataLoaded = false;
+                    updateStudentTab();
+                    return false;
+                });
+        }
+        
+        // GitHub에 데이터 업로드
+        function uploadToGitHub(jsonData) {
+            if (!githubConfig.username || !githubConfig.repo) {
+                throw new Error('GitHub 설정이 필요합니다.');
+            }
+            
+            var apiUrl = 'https://api.github.com/repos/' + githubConfig.username + '/' + githubConfig.repo + '/contents/grade-data.json';
+            
+            return fetch(apiUrl)
+                .then(response => {
+                    if (response.ok) {
+                        return response.json();
+                    }
+                    return null;
+                })
+                .then(existingFile => {
+                    var requestBody = {
+                        message: '성적 데이터 업데이트 - ' + new Date().toLocaleString('ko-KR'),
+                        content: btoa(unescape(encodeURIComponent(JSON.stringify(jsonData, null, 2))))
+                    };
+                    
+                    if (existingFile && existingFile.sha) {
+                        requestBody.sha = existingFile.sha;
+                    }
+                    
+                    var headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    
+                    if (githubConfig.token) {
+                        headers['Authorization'] = 'token ' + githubConfig.token;
+                    }
+                    
+                    return fetch(apiUrl, {
+                        method: 'PUT',
+                        headers: headers,
+                        body: JSON.stringify(requestBody)
+                    });
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        if (response.status === 401) {
+                            throw new Error('GitHub 토큰이 유효하지 않습니다.');
+                        } else if (response.status === 403) {
+                            throw new Error('저장소에 쓰기 권한이 없습니다. 토큰 권한을 확인해주세요.');
+                        } else {
+                            throw new Error('업로드 실패 (' + response.status + ')');
+                        }
+                    }
+                    return response.json();
+                });
+        }
+
+        function switchTab(tabName) {
+            var tabs = document.querySelectorAll('.tab');
+            var contents = document.querySelectorAll('.tab-content');
+            
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
+            for (var i = 0; i < contents.length; i++) {
+                contents[i].classList.remove('active');
+            }
+            
+            if (tabName === 'student') {
+                document.querySelector('.tab').classList.add('active');
+                document.getElementById('studentTab').classList.add('active');
+            } else {
+                document.querySelectorAll('.tab')[1].classList.add('active');
+                document.getElementById('adminTab').classList.add('active');
+            }
+        }
+
+        var uploadArea = document.getElementById('uploadArea');
+        var fileInput = document.getElementById('fileInput');
+        var processBtn = document.getElementById('processBtn');
+        
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                var files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    processBtn.disabled = false;
+                }
+            });
+        }
+        
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                processBtn.disabled = !fileInput.files.length;
+            });
+        }
+
+        function processFileAndUpload() {
+            var file = fileInput.files[0];
+            if (!file) {
+                showStatus('파일을 선택해주세요.', 'error');
+                return;
+            }
+            
+            if (!githubConfig.username || !githubConfig.repo) {
+                showStatus('GitHub 설정을 먼저 완료해주세요.', 'error');
+                return;
+            }
+            
+            showProgress(true);
+            updateProgress(10, '파일 읽는 중...');
+            
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    updateProgress(30, '데이터 파싱 중...');
+                    var data = new Uint8Array(e.target.result);
+                    var workbook = XLSX.read(data, {type: 'array'});
+                    
+                    updateProgress(50, '학생 데이터 처리 중...');
+                    parseExcelData(workbook);
+                    
+                    updateProgress(70, 'GitHub에 업로드 중...');
+                    
+                    var uploadData = {
+                        students: studentByNumber,
+                        maxScores: maxScores,
+                        testSheets: window.discoveredTestSheets,
+                        attendanceMap: window.attendanceToNameMap,
+                        testRatios: window.testRatios,
+                        lastUpdated: new Date().toISOString()
+                    };
+                    
+                    uploadToGitHub(uploadData)
+                        .then(result => {
+                            updateProgress(100, '완료!');
+                            setTimeout(() => {
+                                showProgress(false);
+                                showStatus('✅ 데이터가 성공적으로 GitHub에 업로드되었습니다!', 'success');
+                                
+                                setTimeout(() => {
+                                    loadDataFromGitHub();
+                                }, 1000);
+                                
+                                updateDataSummary();
+                                updateStudentTab();
+                            }, 500);
+                        })
+                        .catch(error => {
+                            showProgress(false);
+                            showStatus('GitHub 업로드 실패: ' + error.message, 'error');
+                            console.error('업로드 오류:', error);
+                        });
+                    
+                } catch (error) {
+                    showProgress(false);
+                    showStatus('파일 처리 중 오류가 발생했습니다: ' + error.message, 'error');
+                }
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseExcelData(workbook) {
+            var attendanceToNameMap = {};
+            var studentsByName = {};
+            var testSources = {};
+            var testRatios = {};
+            
+            var firstSheetName = workbook.SheetNames[0];
+            if (workbook.Sheets[firstSheetName]) {
+                var firstSheet = workbook.Sheets[firstSheetName];
+                var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+                
+                console.log('첫번째 시트에서 출처 및 비율 정보 수집:', firstSheetName);
+                
+                var sourceStartRow = -1;
+                var testNameColumn = -1;
+                var sourceColumn = 15;
+                
+                for (var i = 0; i < firstSheetData.length; i++) {
+                    var row = firstSheetData[i];
+                    if (row) {
+                        for (var j = 0; j < row.length; j++) {
+                            if (row[j] && row[j].toString().includes('시험출처')) {
+                                sourceStartRow = i + 1;
+                                console.log('시험출처 헤더 발견, 데이터 시작 행:', sourceStartRow + 1);
+                                break;
+                            }
+                        }
+                        if (sourceStartRow !== -1) break;
+                    }
+                }
+                
+                if (sourceStartRow === -1) {
+                    sourceStartRow = 6;
+                    console.log('시험출처 헤더를 찾지 못함. 7행부터 시작');
+                }
+                
+                for (var col = 0; col < 5; col++) {
+                    if (firstSheetData[sourceStartRow] && firstSheetData[sourceStartRow][col] && 
+                        firstSheetData[sourceStartRow][col].toString().includes('모클')) {
+                        testNameColumn = col;
+                        console.log('시험명 열 발견:', col + 1, '열');
+                        break;
+                    }
+                }
+                
+                if (testNameColumn === -1) {
+                    testNameColumn = 0;
+                }
+                
+                for (var i = sourceStartRow; i < firstSheetData.length; i++) {
+                    var row = firstSheetData[i];
+                    if (row && row[testNameColumn]) {
+                        var testName = row[testNameColumn].toString().trim();
+                        
+                        if (testName.includes('모클')) {
+                            if (row[sourceColumn]) {
+                                var source = row[sourceColumn].toString().trim();
+                                testSources[testName] = source;
+                                console.log('출처 매핑:', testName, '->', source);
+                            }
+                            
+                            if (workbook.Sheets[testName]) {
+                                testRatios[testName] = extractRatiosFromSheet(workbook.Sheets[testName]);
+                                console.log('비율 정보 수집:', testName, testRatios[testName]);
+                            }
+                        }
+                    }
+                }
+                
+                console.log('수집된 시험 출처:', testSources);
+                console.log('수집된 비율 정보:', testRatios);
+            }
+            
+            function extractRatiosFromSheet(worksheet) {
+                var sheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                var ratios = {};
+                
+                if (sheetData.length <= 1) return ratios;
+                
+                var headers = sheetData[0];
+                
+                for (var i = 1; i < Math.min(5, sheetData.length); i++) {
+                    var row = sheetData[i];
+                    if (!row) continue;
+                    
+                    var isRatioRow = false;
+                    if (row[0] && (row[0].toString().includes('비율') || row[0].toString().includes('%'))) {
+                        isRatioRow = true;
+                    } else {
+                        var ratioCount = 0;
+                        for (var j = 5; j < Math.min(14, row.length); j++) {
+                            if (row[j] && !isNaN(row[j])) {
+                                var val = parseFloat(row[j]);
+                                if (val > 0 && val <= 100) {
+                                    ratioCount++;
+                                }
+                            }
+                        }
+                        if (ratioCount >= 3) {
+                            isRatioRow = true;
+                        }
+                    }
+                    
+                    if (isRatioRow) {
+                        for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
+                            var subject = headers[j];
+                            var ratioValue = row[j];
+                            
+                            if (subject && ratioValue !== null && ratioValue !== undefined && ratioValue !== '') {
+                                var ratio = parseFloat(ratioValue);
+                                if (!isNaN(ratio) && ratio > 0 && ratio <= 100) {
+                                    ratios[subject] = ratio;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+                
+                return ratios;
+            }
+            
+            var mappingSheetName = workbook.SheetNames[1];
+            if (workbook.Sheets[mappingSheetName]) {
+                var mappingSheet = workbook.Sheets[mappingSheetName];
+                var mappingData = XLSX.utils.sheet_to_json(mappingSheet, {header: 1});
+                
+                console.log('출결번호-이름 매핑 시트:', mappingSheetName);
+                
+                for (var i = 1; i < mappingData.length; i++) {
+                    var row = mappingData[i];
+                    if (row && row[0] && row[1]) {
+                        var name = row[0];
+                        var attendanceNumber = row[1];
+                        attendanceToNameMap[attendanceNumber] = name;
+                        
+                        if (!studentsByName[name]) {
+                            studentsByName[name] = {
+                                name: name,
+                                attendanceNumber: attendanceNumber,
+                                grades: {}
+                            };
+                        }
+                    }
+                }
+                
+                console.log('총 매핑된 학생 수:', Object.keys(attendanceToNameMap).length);
+            }
+            
+            var allSheetNames = workbook.SheetNames;
+            var testSheetNames = [];
+            
+            for (var i = 0; i < allSheetNames.length; i++) {
+                var sheetName = allSheetNames[i];
+                if (sheetName.includes('모클') && !sheetName.includes('성적표')) {
+                    testSheetNames.push(sheetName);
+                }
+            }
+            
+            testSheetNames.sort(function(a, b) {
+                var numA = parseInt(a.match(/\d+/));
+                var numB = parseInt(b.match(/\d+/));
+                return numA - numB;
+            });
+            
+            console.log('발견된 모클 시트들:', testSheetNames);
+            
+            for (var s = 0; s < testSheetNames.length; s++) {
+                var sheetName = testSheetNames[s];
+                if (!workbook.Sheets[sheetName]) continue;
+                
+                var worksheet = workbook.Sheets[sheetName];
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                
+                if (jsonData.length <= 1) continue;
+                
+                var headers = jsonData[0];
+                
+                if (!maxScores[sheetName]) {
+                    maxScores[sheetName] = {};
+                    console.log('최대점수 자동 계산 중:', sheetName);
+                    
+                    for (var j = 5; j < Math.min(14, headers.length); j++) {
+                        var subject = headers[j];
+                        if (subject) {
+                            var maxScore = 0;
+                            for (var i = 1; i < jsonData.length; i++) {
+                                var row = jsonData[i];
+                                if (row && row[j] !== null && row[j] !== undefined && row[j] !== '') {
+                                    var score = parseInt(row[j]);
+                                    if (!isNaN(score) && score > maxScore) {
+                                        maxScore = score;
+                                    }
+                                }
+                            }
+                            if (maxScore > 0) {
+                                maxScores[sheetName][subject] = maxScore;
+                                console.log('최대점수 설정:', subject, '=', maxScore);
+                            }
+                        }
+                    }
+                }
+                
+                for (var i = 1; i < jsonData.length; i++) {
+                    var row = jsonData[i];
+                    if (!row || !row[0]) continue;
+                    
+                    var name = row[0];
+                    
+                    if (!studentsByName[name]) continue;
+                    
+                    var className = row[2];
+                    var grade = row[3];
+                    var score = row[4];
+                    var needScore = row[14];
+                    var gradeCut = row[15];
+                    
+                    var source = testSources[sheetName] || '';
+                    
+                    var details = {};
+                    var ratios = {};
+                    var sheetRatios = testRatios[sheetName] || {};
+                    
+                    for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
+                        var subject = headers[j];
+                        var subjectScore = row[j];
+                        
+                        if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
+                            details[subject] = subjectScore;
+                            
+                            if (sheetRatios[subject]) {
+                                ratios[subject] = sheetRatios[subject];
+                            } else {
+                                var maxScore = maxScores[sheetName] && maxScores[sheetName][subject];
+                                if (maxScore) {
+                                    ratios[subject] = Math.round((subjectScore / maxScore) * 100);
+                                }
+                            }
+                        }
+                    }
+                    
+                    studentsByName[name].grades[sheetName] = {
+                        grade: grade,
+                        score: score,
+                        className: className,
+                        details: details,
+                        ratios: ratios,
+                        needScore: needScore,
+                        gradeCut: gradeCut,
+                        source: source
+                    };
+                }
+            }
+            
+            studentByNumber = {};
+            for (var attendanceNumber in attendanceToNameMap) {
+                var name = attendanceToNameMap[attendanceNumber];
+                if (studentsByName[name]) {
+                    studentByNumber[attendanceNumber] = studentsByName[name];
+                }
+            }
+            
+            window.discoveredTestSheets = testSheetNames;
+            window.attendanceToNameMap = attendanceToNameMap;
+            window.testRatios = testRatios;
+            isDataLoaded = true;
+            
+            console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
+            console.log('비율 정보:', testRatios);
+        }
+
+        function showProgress(show) {
+            document.getElementById('progressContainer').style.display = show ? 'block' : 'none';
+        }
+        
+        function updateProgress(percent, message) {
+            var progressBar = document.getElementById('progressBar');
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = message || (percent + '%');
+        }
+        
+        function showStatus(message, type) {
+            var statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(function() {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        function updateDataSummary() {
+            var summaryDiv = document.getElementById('dataSummary');
+            var gridDiv = document.getElementById('summaryGrid');
+            
+            var totalStudents = Object.keys(studentByNumber).length;
+            var mappingCount = window.attendanceToNameMap ? Object.keys(window.attendanceToNameMap).length : 0;
+            var discoveredSheets = window.discoveredTestSheets ? window.discoveredTestSheets.length : 0;
+            
+            var html = '<div class="summary-item"><div class="summary-value">' + mappingCount + '</div><div class="summary-label">매핑 테이블 학생수</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + totalStudents + '</div><div class="summary-label">성적 데이터 학생수</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + discoveredSheets + '</div><div class="summary-label">발견된 시트 수</div></div>';
+            
+            if (githubConfig.username && githubConfig.repo) {
+                html += '<div class="summary-item"><div class="summary-value" style="font-size: 0.9em;">' + githubConfig.username + '/' + githubConfig.repo + '</div><div class="summary-label">GitHub 저장소</div></div>';
+            }
+            
+            gridDiv.innerHTML = html;
+            summaryDiv.style.display = 'block';
+        }
+        
+        function updateDataStatus(message, isSuccess, lastUpdated) {
+            var statusMessage = document.getElementById('dataStatusMessage');
+            var noDataDiv = document.getElementById('noData');
+            
+            if (isSuccess && lastUpdated) {
+                var updateDate = new Date(lastUpdated);
+                var formattedDate = updateDate.toLocaleDateString('ko-KR') + ' ' + updateDate.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'});
+                statusMessage.innerHTML = message + '<br><small style="color: #666;">마지막 업데이트: ' + formattedDate + '</small>';
+                noDataDiv.style.background = '#d4edda';
+                noDataDiv.style.color = '#155724';
+                noDataDiv.style.border = '1px solid #c3e6cb';
+            } else {
+                statusMessage.innerHTML = message;
+                noDataDiv.style.background = '#f8f9fa';
+                noDataDiv.style.color = '#666';
+                noDataDiv.style.border = 'none';
+            }
+        }
+        
+        function updateStudentTab() {
+            var noDataDiv = document.getElementById('noData');
+            var searchBtn = document.getElementById('searchBtn');
+            
+            if (isDataLoaded && Object.keys(studentByNumber).length > 0) {
+                searchBtn.disabled = false;
+                
+                if (githubConfig.username && githubConfig.repo) {
+                    var shareableUrl = window.location.origin + window.location.pathname + 
+                                     '?username=' + githubConfig.username + '&repo=' + githubConfig.repo;
+                    document.getElementById('shareableUrl').textContent = shareableUrl;
+                    document.getElementById('urlInfo').style.display = 'block';
+                }
+            } else {
+                searchBtn.disabled = true;
+                document.getElementById('urlInfo').style.display = 'none';
+            }
+        }
+
+        function searchStudent() {
+            if (!isDataLoaded) {
+                alert('데이터가 로드되지 않았습니다.');
+                return;
+            }
+            
+            var query = document.getElementById('searchInput').value.trim();
+            var resultsDiv = document.getElementById('results');
+            var noResultsDiv = document.getElementById('noResults');
+            var noDataDiv = document.getElementById('noData');
+            
+            resultsDiv.style.display = 'none';
+            noResultsDiv.style.display = 'none';
+            noDataDiv.style.display = 'none';
+            
+            if (!query) {
+                alert('출결번호를 입력해주세요.');
+                return;
+            }
+            
+            var student = studentByNumber[query];
+            
+            if (!student) {
+                noResultsDiv.style.display = 'block';
+                return;
+            }
+            
+            displayStudentInfo(student);
+            displaySummaryTable(student);
+            displayGrades(student.grades);
+            resultsDiv.style.display = 'block';
+        }
+
+        function displayStudentInfo(student) {
+            var studentInfoDiv = document.getElementById('studentInfo');
+            var gradeKeys = Object.keys(student.grades);
+            var totalTests = window.discoveredTestSheets ? window.discoveredTestSheets.length : 12;
+            var attendedTests = gradeKeys.length;
+            
+            studentInfoDiv.innerHTML = 
+                '<div class="student-info">' +
+                '<h2>👨‍🎓 ' + student.name + '</h2>' +
+                '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">' +
+                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">출결번호:</span><span style="color: #333; font-weight: bold;">' + student.attendanceNumber + '</span></div>' +
+                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">응시 현황:</span><span style="color: #333; font-weight: bold;">' + attendedTests + '/' + totalTests + '회</span></div>' +
+                '</div></div>';
+        }
+
+        function displaySummaryTable(student) {
+            var summaryTableDiv = document.getElementById('summaryTable');
+            
+            var allTests = window.discoveredTestSheets || ['모클1회', '모클2회', '모클3회'];
+            var totalTests = allTests.length;
+            
+            var tableHtml = '<div class="summary-table">';
+            tableHtml += '<h3>📊 전체 성적 현황 (' + totalTests + '개 시험)</h3>';
+            tableHtml += '<table class="grade-table">';
+            tableHtml += '<thead><tr>';
+            tableHtml += '<th class="test-name">시험</th>';
+            tableHtml += '<th>등급</th>';
+            tableHtml += '<th>점수</th>';
+            tableHtml += '<th>등급컷</th>';
+            tableHtml += '<th>출처</th>';
+            tableHtml += '</tr></thead><tbody>';
+            
+            for (var i = 0; i < allTests.length; i++) {
+                var testName = allTests[i];
+                var gradeData = student.grades[testName];
+                
+                tableHtml += '<tr>';
+                tableHtml += '<td class="test-name">' + testName + '</td>';
+                
+                if (gradeData) {
+                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '">' + gradeData.grade + '</td>';
+                    tableHtml += '<td class="score-cell">' + gradeData.score + '</td>';
+                    tableHtml += '<td class="score-cell">' + (gradeData.gradeCut || '-') + '</td>';
+                    tableHtml += '<td class="source-cell">' + (gradeData.source || '-') + '</td>';
+                } else {
+                    tableHtml += '<td class="absent-cell">미응시</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                }
+                
+                tableHtml += '</tr>';
+            }
+            
+            tableHtml += '</tbody></table></div>';
+            summaryTableDiv.innerHTML = tableHtml;
+        }
+
+        function displayGrades(grades) {
+            var gradeCardsDiv = document.getElementById('gradeCards');
+            gradeCardsDiv.innerHTML = '';
+            
+            var testNames = Object.keys(grades);
+            
+            for (var i = 0; i < testNames.length; i++) {
+                var testName = testNames[i];
+                var gradeData = grades[testName];
+                var gradeCard = document.createElement('div');
+                gradeCard.className = 'grade-card';
+                
+                var detailsHtml = '';
+                if (gradeData.details) {
+                    var detailKeys = Object.keys(gradeData.details);
+                    for (var j = 0; j < detailKeys.length; j++) {
+                        var subject = detailKeys[j];
+                        var score = gradeData.details[subject];
+                        var ratio = gradeData.ratios[subject] || 0;
+                        var ratioColor = ratio >= 80 ? '#e74c3c' : ratio >= 60 ? '#f39c12' : ratio >= 40 ? '#f1c40f' : '#95a5a6';
+                        
+                        detailsHtml += 
+                            '<div class="grade-item">' +
+                            '<span class="grade-label">' + subject + '</span>' +
+                            '<span class="grade-value">' + score + '점 ' +
+                            '<span style="color: ' + ratioColor + '; font-size: 0.85em;">(' + ratio + '%)</span>' +
+                            '</span></div>';
+                    }
+                }
+                
+                var cutInfo = '';
+                if (gradeData.gradeCut) {
+                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.gradeCut + '점</div><div class="grade-summary-label">내 등급컷</div></div>';
+                }
+                
+                if (gradeData.needScore !== null && gradeData.needScore !== undefined) {
+                    var needScoreDisplay = gradeData.needScore > 0 ? '+' + gradeData.needScore : gradeData.needScore;
+                    var needScoreColor = gradeData.needScore <= 0 ? '#2ecc71' : '#e74c3c';
+                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value" style="color: ' + needScoreColor + '">' + needScoreDisplay + '점</div><div class="grade-summary-label">한등급↑ 필요점수</div></div>';
+                }
+                
+                var sourceInfo = '';
+                if (gradeData.source && gradeData.source.trim() !== '') {
+                    sourceInfo = '<div class="grade-summary-item"><div class="grade-summary-value" style="font-size: 0.9em; color: #666;">' + gradeData.source + '</div><div class="grade-summary-label">출처</div></div>';
+                }
+                
+                gradeCard.innerHTML = 
+                    '<h3>📝 ' + testName + '</h3>' +
+                    '<div class="grade-summary">' +
+                    '<div class="grade-summary-item"><div class="grade-summary-value grade-' + gradeData.grade + '">' + gradeData.grade + '등급</div><div class="grade-summary-label">내 등급</div></div>' +
+                    '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.score + '점</div><div class="grade-summary-label">내 점수</div></div>' +
+                    cutInfo + sourceInfo + '</div>' +
+                    (detailsHtml ? '<div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 8px;"><h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">📊 과목별 성취도 (점수 및 비율)</h4><div class="grade-details">' + detailsHtml + '</div></div>' : '');
+                
+                gradeCardsDiv.appendChild(gradeCard);
+            }
+        }
+
+        // 이벤트 리스너
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+            if (e.target.value.length > 4) {
+                e.target.value = e.target.value.slice(0, 4);
+            }
+        });
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchStudent();
+            }
+        });
+
+        // 페이지 로드 시 실행
+        window.onload = function() {
+            console.log('페이지 로드 시작');
+            
+            // 자동 감지된 설정이 있는지 확인 (URL에서)
+            var hostname = window.location.hostname;
+            var pathname = window.location.pathname;
+            
+            var autoConfig = null;
+            if (hostname.includes('.github.io')) {
+                var username = hostname.split('.')[0];
+                var repo = pathname.split('/')[1];
+                
+                if (username && repo) {
+                    console.log('자동 감지된 설정:', username, repo);
+                    autoConfig = {
+                        username: username,
+                        repo: repo,
+                        token: ''
+                    };
+                }
+            }
+            
+            // 저장된 GitHub 설정 불러오기
+            var savedConfig = localStorage.getItem('githubConfig');
+            var savedDataUrl = localStorage.getItem('dataUrl');
+            
+            var finalConfig = null;
+            var configSource = '';
+            
+            if (savedConfig && savedDataUrl) {
+                try {
+                    finalConfig = JSON.parse(savedConfig);
+                    configSource = '저장된 설정';
+                } catch (error) {
+                    console.error('저장된 설정 파싱 실패:', error);
+                }
+            } else if (autoConfig) {
+                finalConfig = autoConfig;
+                configSource = '자동 감지';
+            }
+            
+            if (finalConfig && finalConfig.username && finalConfig.repo) {
+                console.log('설정 사용 (' + configSource + '):', finalConfig);
+                
+                githubConfig = finalConfig;
+                dataUrl = 'https://raw.githubusercontent.com/' + finalConfig.username + '/' + finalConfig.repo + '/main/grade-data.json';
+                
+                // localStorage에 저장 (다음에 더 빠르게 로드하기 위해)
+                localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
+                localStorage.setItem('dataUrl', dataUrl);
+                
+                // 설정이 있으면 입력 필드에 채우기
+                document.getElementById('githubUsername').value = finalConfig.username || '';
+                document.getElementById('githubRepo').value = finalConfig.repo || '';
+                
+                // UI 전환
+                document.getElementById('githubSetup').style.display = 'none';
+                document.getElementById('uploadSection').style.display = 'block';
+                
+                console.log('데이터 로드 시작...');
+                // 약간의 지연 후 데이터 로드 시도
+                setTimeout(function() {
+                    loadDataFromGitHub();
+                }, 1000);
+                
+            } else {
+                console.log('설정을 찾을 수 없음');
+                updateDataStatus('GitHub 설정이 필요합니다. 관리자 탭에서 설정해주세요.');
+                
+                // 자동 감지 정보가 있다면 미리 채워주기
+                if (autoConfig) {
+                    document.getElementById('githubUsername').value = autoConfig.username || '';
+                    document.getElementById('githubRepo').value = autoConfig.repo || '';
+                }
+            }
+            
+            updateStudentTab();
+        };
+    </script>
+</body>
+</html><!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
@@ -454,19 +1246,6 @@
             border-radius: 15px;
         }
         
-        .github-output {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            border: 1px solid #dee2e6;
-            max-height: 300px;
-            overflow-y: auto;
-            display: none;
-        }
-        
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -560,7 +1339,7 @@
                 
                 <button onclick="saveGitHubConfig()" class="setup-btn">설정 저장</button>
                 <button onclick="testGitHubConnection()" class="setup-btn">연결 테스트</button>
-                <button onclick="showDebugButton()" class="setup-btn" style="background: #6c757d;">🔧 디버그 정보</button>
+                <button onclick="forceShowSetup()" class="setup-btn" style="background: #17a2b8;">🔄 설정 다시하기</button>
                 
                 <p style="margin-top: 15px; font-size: 0.9em;">
                     <strong>📌 GitHub Token 발급 방법:</strong><br>
@@ -597,18 +1376,6 @@
                 <h3>📊 업로드된 데이터 현황</h3>
                 <div class="summary-grid" id="summaryGrid"></div>
             </div>
-            
-            <!-- 디버그 정보 섹션 추가 -->
-            <div id="debugSection" style="display: none; margin-top: 20px;">
-                <div class="instructions" style="background: #f8f9fa; border-left: 4px solid #6c757d;">
-                    <h3>🔧 디버그 정보</h3>
-                    <div id="debugInfo" style="font-family: monospace; font-size: 0.9em; background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                        <!-- 디버그 정보가 여기에 표시됩니다 -->
-                    </div>
-                    <button onclick="toggleDebug()" class="setup-btn">디버그 정보 새로고침</button>
-                    <button onclick="clearAllData()" class="setup-btn" style="background: #dc3545;">모든 설정 초기화</button>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -624,45 +1391,84 @@
             "모클3회": {"화법과 작문": 13, "문법": 11, "독서(인문)": 20, "독서(사회)": 9, "독서(기술)": 9, "문학(현대시)": 7, "문학(현대소설)": 9, "문학(고전시가)": 13, "문학(고전소설)": 9},
         };
 
-        // URL 파라미터에서 GitHub 설정 자동 추출
-        function getConfigFromURL() {
-            var urlParams = new URLSearchParams(window.location.search);
-            var username = urlParams.get('username');
-            var repo = urlParams.get('repo');
+        // 설정 강제 표시 함수
+        function forceShowSetup() {
+            localStorage.removeItem('githubConfig');
+            localStorage.removeItem('dataUrl');
             
-            if (username && repo) {
-                console.log('URL에서 설정 발견:', username, repo);
-                return {
-                    username: username,
-                    repo: repo,
-                    token: '' // URL에는 토큰 포함하지 않음 (보안상)
-                };
-            }
-            return null;
+            document.getElementById('githubSetup').style.display = 'block';
+            document.getElementById('uploadSection').style.display = 'none';
+            
+            document.getElementById('githubUsername').value = '';
+            document.getElementById('githubRepo').value = '';
+            document.getElementById('githubToken').value = '';
+            
+            githubConfig = {};
+            dataUrl = '';
+            studentByNumber = {};
+            isDataLoaded = false;
+            
+            showStatus('설정이 초기화되었습니다. 새로 설정해주세요.', 'success');
+            updateStudentTab();
+        }
+
+        // 토큰 초기화 함수
+        function clearTokenField() {
+            document.getElementById('githubToken').value = '';
+            document.getElementById('githubToken').focus();
+            showStatus('토큰 필드가 초기화되었습니다. 새 토큰을 입력하세요.', 'success');
         }
         
-        // GitHub 저장소 URL에서 자동으로 설정 추출
-        function autoDetectConfig() {
-            // 현재 사이트의 URL에서 GitHub 정보 추출
-            var hostname = window.location.hostname;
-            var pathname = window.location.pathname;
+        // 현재 토큰 확인 함수
+        function checkCurrentToken() {
+            var token = document.getElementById('githubToken').value.trim();
             
-            // GitHub Pages URL 패턴: username.github.io/repo-name
-            if (hostname.includes('.github.io')) {
-                var username = hostname.split('.')[0];
-                var repo = pathname.split('/')[1];
-                
-                if (username && repo) {
-                    console.log('자동 감지된 설정:', username, repo);
-                    return {
-                        username: username,
-                        repo: repo,
-                        token: ''
-                    };
-                }
+            if (!token) {
+                showStatus('토큰이 입력되지 않았습니다.', 'error');
+                return;
             }
-            return null;
+            
+            showStatus('토큰 유효성 검사 중...', 'warning');
+            
+            fetch('https://api.github.com/user', {
+                headers: {
+                    'Authorization': 'token ' + token,
+                    'User-Agent': 'Grade-System'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('토큰이 유효하지 않음 (상태: ' + response.status + ')');
+                }
+            })
+            .then(userData => {
+                showStatus('✅ 토큰이 유효합니다! 사용자: ' + userData.login, 'success');
+                
+                fetch('https://api.github.com/user/repos', {
+                    headers: {
+                        'Authorization': 'token ' + token,
+                        'User-Agent': 'Grade-System'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showStatus('✅ 토큰 권한 확인 완료! repo 권한이 있습니다.', 'success');
+                    } else {
+                        showStatus('⚠️ 토큰은 유효하지만 repo 권한이 부족할 수 있습니다.', 'warning');
+                    }
+                })
+                .catch(error => {
+                    showStatus('⚠️ 권한 확인 실패: ' + error.message, 'warning');
+                });
+            })
+            .catch(error => {
+                showStatus('❌ ' + error.message, 'error');
+            });
         }
+
+        // GitHub 설정 저장
         function saveGitHubConfig() {
             var username = document.getElementById('githubUsername').value.trim();
             var repo = document.getElementById('githubRepo').value.trim();
@@ -679,20 +1485,16 @@
                 token: token
             };
             
-            // 데이터 URL 설정
-            dataUrl = `https://raw.githubusercontent.com/${username}/${repo}/main/grade-data.json`;
+            dataUrl = 'https://raw.githubusercontent.com/' + username + '/' + repo + '/main/grade-data.json';
             
-            // 로컬에 설정 저장
             localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
             localStorage.setItem('dataUrl', dataUrl);
             
             showStatus('GitHub 설정이 저장되었습니다!', 'success');
             
-            // UI 업데이트
             document.getElementById('githubSetup').style.display = 'none';
             document.getElementById('uploadSection').style.display = 'block';
             
-            // 데이터 로드 시도
             loadDataFromGitHub();
         }
         
@@ -706,7 +1508,7 @@
                 return;
             }
             
-            var testUrl = `https://api.github.com/repos/${username}/${repo}`;
+            var testUrl = 'https://api.github.com/repos/' + username + '/' + repo;
             
             showStatus('연결 테스트 중...', 'warning');
             
@@ -725,7 +1527,7 @@
                 });
         }
         
-        // GitHub에서 데이터 로드 (개선된 버전)
+        // GitHub에서 데이터 로드
         function loadDataFromGitHub() {
             if (!dataUrl) {
                 console.log('데이터 URL이 설정되지 않음');
@@ -735,7 +1537,6 @@
             updateDataStatus('온라인 데이터를 불러오는 중...');
             console.log('데이터 로드 시도:', dataUrl);
             
-            // 캐시 방지를 위한 타임스탬프 추가
             var requestUrl = dataUrl + '?t=' + Date.now() + '&cache=' + Math.random();
             
             fetch(requestUrl)
@@ -745,16 +1546,14 @@
                         if (response.status === 404) {
                             throw new Error('데이터 파일을 찾을 수 없습니다. 관리자가 아직 데이터를 업로드하지 않았습니다.');
                         } else {
-                            throw new Error(`서버 오류 (${response.status})`);
+                            throw new Error('서버 오류 (' + response.status + ')');
                         }
                     }
-                    return response.text(); // JSON 대신 text로 먼저 받아서 확인
+                    return response.text();
                 })
                 .then(text => {
                     console.log('받은 데이터 크기:', text.length);
-                    console.log('데이터 시작 부분:', text.substring(0, 100));
                     
-                    // JSON 파싱 시도
                     var data;
                     try {
                         data = JSON.parse(text);
@@ -765,987 +1564,12 @@
                     
                     console.log('파싱된 데이터:', data);
                     
-                    // 데이터 구조 확인
                     if (!data || typeof data !== 'object') {
                         throw new Error('데이터 구조가 올바르지 않습니다.');
                     }
                     
-                    // 데이터 할당
                     studentByNumber = data.students || {};
                     maxScores = Object.assign({}, maxScores, data.maxScores || {});
                     window.discoveredTestSheets = data.testSheets || [];
                     window.attendanceToNameMap = data.attendanceMap || {};
-                    window.testRatios = data.testRatios || {}; // 비율 정보도 복원
-                    
-                    var studentCount = Object.keys(studentByNumber).length;
-                    console.log('로드된 학생 수:', studentCount);
-                    
-                    isDataLoaded = studentCount > 0;
-                    
-                    if (isDataLoaded) {
-                        updateDataStatus('✅ 성적 데이터가 준비되었습니다!', true, data.lastUpdated);
-                        console.log('데이터 로드 성공!');
-                    } else {
-                        updateDataStatus('업로드된 데이터가 비어있습니다. 관리자에게 문의하세요.');
-                        console.log('데이터는 있지만 학생 정보가 없음');
-                    }
-                    
-                    updateStudentTab();
-                    return true;
-                })
-                .catch(error => {
-                    console.error('데이터 로드 실패:', error);
-                    updateDataStatus('데이터 로드 실패: ' + error.message);
-                    isDataLoaded = false;
-                    updateStudentTab();
-                    return false;
-                });
-        }
-        
-        // GitHub에 데이터 업로드
-        function uploadToGitHub(jsonData) {
-            if (!githubConfig.username || !githubConfig.repo) {
-                throw new Error('GitHub 설정이 필요합니다.');
-            }
-            
-            var apiUrl = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/grade-data.json`;
-            
-            // 먼저 기존 파일이 있는지 확인
-            return fetch(apiUrl)
-                .then(response => {
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    return null; // 파일이 없음
-                })
-                .then(existingFile => {
-                    var requestBody = {
-                        message: `성적 데이터 업데이트 - ${new Date().toLocaleString('ko-KR')}`,
-                        content: btoa(unescape(encodeURIComponent(JSON.stringify(jsonData, null, 2))))
-                    };
-                    
-                    // 기존 파일이 있으면 SHA 추가
-                    if (existingFile && existingFile.sha) {
-                        requestBody.sha = existingFile.sha;
-                    }
-                    
-                    var headers = {
-                        'Content-Type': 'application/json'
-                    };
-                    
-                    // 토큰이 있으면 인증 헤더 추가
-                    if (githubConfig.token) {
-                        headers['Authorization'] = `token ${githubConfig.token}`;
-                    }
-                    
-                    return fetch(apiUrl, {
-                        method: 'PUT',
-                        headers: headers,
-                        body: JSON.stringify(requestBody)
-                    });
-                })
-                .then(response => {
-                    if (!response.ok) {
-                        if (response.status === 401) {
-                            throw new Error('GitHub 토큰이 유효하지 않습니다.');
-                        } else if (response.status === 403) {
-                            throw new Error('저장소에 쓰기 권한이 없습니다. 토큰 권한을 확인해주세요.');
-                        } else {
-                            throw new Error(`업로드 실패 (${response.status})`);
-                        }
-                    }
-                    return response.json();
-                });
-        }
-
-        function switchTab(tabName) {
-            var tabs = document.querySelectorAll('.tab');
-            var contents = document.querySelectorAll('.tab-content');
-            
-            for (var i = 0; i < tabs.length; i++) {
-                tabs[i].classList.remove('active');
-            }
-            for (var i = 0; i < contents.length; i++) {
-                contents[i].classList.remove('active');
-            }
-            
-            if (tabName === 'student') {
-                document.querySelector('.tab').classList.add('active');
-                document.getElementById('studentTab').classList.add('active');
-            } else {
-                document.querySelectorAll('.tab')[1].classList.add('active');
-                document.getElementById('adminTab').classList.add('active');
-            }
-        }
-
-        var uploadArea = document.getElementById('uploadArea');
-        var fileInput = document.getElementById('fileInput');
-        var processBtn = document.getElementById('processBtn');
-        
-        if (uploadArea) {
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            });
-            
-            uploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-            });
-            
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                var files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    fileInput.files = files;
-                    processBtn.disabled = false;
-                }
-            });
-        }
-        
-        if (fileInput) {
-            fileInput.addEventListener('change', function() {
-                processBtn.disabled = !fileInput.files.length;
-            });
-        }
-
-        function processFileAndUpload() {
-            var file = fileInput.files[0];
-            if (!file) {
-                showStatus('파일을 선택해주세요.', 'error');
-                return;
-            }
-            
-            if (!githubConfig.username || !githubConfig.repo) {
-                showStatus('GitHub 설정을 먼저 완료해주세요.', 'error');
-                return;
-            }
-            
-            showProgress(true);
-            updateProgress(10, '파일 읽는 중...');
-            
-            var reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    updateProgress(30, '데이터 파싱 중...');
-                    var data = new Uint8Array(e.target.result);
-                    var workbook = XLSX.read(data, {type: 'array'});
-                    
-                    updateProgress(50, '학생 데이터 처리 중...');
-                    parseExcelData(workbook);
-                    
-                    updateProgress(70, 'GitHub에 업로드 중...');
-                    
-                    // GitHub에 업로드할 데이터 준비
-                    var uploadData = {
-                        students: studentByNumber,
-                        maxScores: maxScores,
-                        testSheets: window.discoveredTestSheets,
-                        attendanceMap: window.attendanceToNameMap,
-                        testRatios: window.testRatios, // 비율 정보도 함께 저장
-                        lastUpdated: new Date().toISOString()
-                    };
-                    
-                    uploadToGitHub(uploadData)
-                        .then(result => {
-                            updateProgress(100, '완료!');
-                            setTimeout(() => {
-                                showProgress(false);
-                                showStatus('✅ 데이터가 성공적으로 GitHub에 업로드되었습니다!', 'success');
-                                
-                                // 업로드 성공 후 바로 데이터 로드
-                                setTimeout(() => {
-                                    loadDataFromGitHub();
-                                }, 1000);
-                                
-                                updateDataSummary();
-                                updateStudentTab();
-                            }, 500);
-                        })
-                        .catch(error => {
-                            showProgress(false);
-                            showStatus('GitHub 업로드 실패: ' + error.message, 'error');
-                            console.error('업로드 오류:', error);
-                        });
-                    
-                } catch (error) {
-                    showProgress(false);
-                    showStatus('파일 처리 중 오류가 발생했습니다: ' + error.message, 'error');
-                }
-            };
-            
-            reader.readAsArrayBuffer(file);
-        }
-
-        function parseExcelData(workbook) {
-            var attendanceToNameMap = {};
-            var studentsByName = {};
-            var testSources = {}; // 시험별 출처 정보 저장
-            var testRatios = {}; // 시험별 비율 정보 저장
-            
-            // 0단계: 첫번째 시트에서 시험 출처 정보 및 비율 정보 수집
-            var firstSheetName = workbook.SheetNames[0];
-            if (workbook.Sheets[firstSheetName]) {
-                var firstSheet = workbook.Sheets[firstSheetName];
-                var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
-                
-                console.log('첫번째 시트에서 출처 및 비율 정보 수집:', firstSheetName);
-                
-                var sourceStartRow = -1;
-                var testNameColumn = -1;
-                var sourceColumn = 15; // P열
-                
-                // "시험출처" 헤더를 찾아서 그 아래부터 데이터 수집
-                for (var i = 0; i < firstSheetData.length; i++) {
-                    var row = firstSheetData[i];
-                    if (row) {
-                        for (var j = 0; j < row.length; j++) {
-                            if (row[j] && row[j].toString().includes('시험출처')) {
-                                sourceStartRow = i + 1;
-                                console.log('시험출처 헤더 발견, 데이터 시작 행:', sourceStartRow + 1);
-                                break;
-                            }
-                        }
-                        if (sourceStartRow !== -1) break;
-                    }
-                }
-                
-                if (sourceStartRow === -1) {
-                    sourceStartRow = 6;
-                    console.log('시험출처 헤더를 찾지 못함. 7행부터 시작');
-                }
-                
-                // 시험명이 있는 열 찾기 (첫번째 열부터 검색)
-                for (var col = 0; col < 5; col++) {
-                    if (firstSheetData[sourceStartRow] && firstSheetData[sourceStartRow][col] && 
-                        firstSheetData[sourceStartRow][col].toString().includes('모클')) {
-                        testNameColumn = col;
-                        console.log('시험명 열 발견:', col + 1, '열');
-                        break;
-                    }
-                }
-                
-                if (testNameColumn === -1) {
-                    testNameColumn = 0;
-                }
-                
-                // P열에서 출처 정보 수집하고, 해당 시트에서 비율 정보도 수집
-                for (var i = sourceStartRow; i < firstSheetData.length; i++) {
-                    var row = firstSheetData[i];
-                    if (row && row[testNameColumn]) {
-                        var testName = row[testNameColumn].toString().trim();
-                        
-                        if (testName.includes('모클')) {
-                            // 출처 정보 수집
-                            if (row[sourceColumn]) {
-                                var source = row[sourceColumn].toString().trim();
-                                testSources[testName] = source;
-                                console.log('출처 매핑:', testName, '->', source);
-                            }
-                            
-                            // 해당 시트에서 비율 정보 수집 (과목별 비율)
-                            if (workbook.Sheets[testName]) {
-                                testRatios[testName] = extractRatiosFromSheet(workbook.Sheets[testName]);
-                                console.log('비율 정보 수집:', testName, testRatios[testName]);
-                            }
-                        }
-                    }
-                }
-                
-                console.log('수집된 시험 출처:', testSources);
-                console.log('수집된 비율 정보:', testRatios);
-            }
-            
-            // 각 시트에서 비율 정보 추출하는 함수
-            function extractRatiosFromSheet(worksheet) {
-                var sheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-                var ratios = {};
-                
-                if (sheetData.length <= 1) return ratios;
-                
-                var headers = sheetData[0];
-                
-                // 비율이 있는 행 찾기 (보통 2번째 행이나 헤더 바로 아래)
-                for (var i = 1; i < Math.min(5, sheetData.length); i++) {
-                    var row = sheetData[i];
-                    if (!row) continue;
-                    
-                    // 첫 번째 셀이 "비율" 또는 "%" 관련 내용이거나, 숫자가 100 이하의 소수인 경우
-                    var isRatioRow = false;
-                    if (row[0] && (row[0].toString().includes('비율') || row[0].toString().includes('%'))) {
-                        isRatioRow = true;
-                    } else {
-                        // 과목별 데이터가 모두 0~100 사이의 숫자인지 확인
-                        var ratioCount = 0;
-                        for (var j = 5; j < Math.min(14, row.length); j++) {
-                            if (row[j] && !isNaN(row[j])) {
-                                var val = parseFloat(row[j]);
-                                if (val > 0 && val <= 100) {
-                                    ratioCount++;
-                                }
-                            }
-                        }
-                        if (ratioCount >= 3) { // 3개 이상의 과목에서 비율값이 있으면
-                            isRatioRow = true;
-                        }
-                    }
-                    
-                    if (isRatioRow) {
-                        // 과목별 비율 수집 (5~13열)
-                        for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
-                            var subject = headers[j];
-                            var ratioValue = row[j];
-                            
-                            if (subject && ratioValue !== null && ratioValue !== undefined && ratioValue !== '') {
-                                var ratio = parseFloat(ratioValue);
-                                if (!isNaN(ratio) && ratio > 0 && ratio <= 100) {
-                                    ratios[subject] = ratio;
-                                }
-                            }
-                        }
-                        break; // 첫 번째 비율 행만 사용
-                    }
-                }
-                
-                return ratios;
-            }
-            
-            // 1단계: 2번째 시트에서 출결번호-이름 매핑 생성
-            var mappingSheetName = workbook.SheetNames[1];
-            if (workbook.Sheets[mappingSheetName]) {
-                var mappingSheet = workbook.Sheets[mappingSheetName];
-                var mappingData = XLSX.utils.sheet_to_json(mappingSheet, {header: 1});
-                
-                console.log('출결번호-이름 매핑 시트:', mappingSheetName);
-                
-                for (var i = 1; i < mappingData.length; i++) {
-                    var row = mappingData[i];
-                    if (row && row[0] && row[1]) {
-                        var name = row[0];
-                        var attendanceNumber = row[1];
-                        attendanceToNameMap[attendanceNumber] = name;
-                        
-                        if (!studentsByName[name]) {
-                            studentsByName[name] = {
-                                name: name,
-                                attendanceNumber: attendanceNumber,
-                                grades: {}
-                            };
-                        }
-                    }
-                }
-                
-                console.log('총 매핑된 학생 수:', Object.keys(attendanceToNameMap).length);
-            }
-            
-            // 2단계: 모든 모클 시트에서 데이터 수집
-            var allSheetNames = workbook.SheetNames;
-            var testSheetNames = [];
-            
-            for (var i = 0; i < allSheetNames.length; i++) {
-                var sheetName = allSheetNames[i];
-                if (sheetName.includes('모클') && !sheetName.includes('성적표')) {
-                    testSheetNames.push(sheetName);
-                }
-            }
-            
-            testSheetNames.sort(function(a, b) {
-                var numA = parseInt(a.match(/\d+/));
-                var numB = parseInt(b.match(/\d+/));
-                return numA - numB;
-            });
-            
-            console.log('발견된 모클 시트들:', testSheetNames);
-            
-            for (var s = 0; s < testSheetNames.length; s++) {
-                var sheetName = testSheetNames[s];
-                if (!workbook.Sheets[sheetName]) continue;
-                
-                var worksheet = workbook.Sheets[sheetName];
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-                
-                if (jsonData.length <= 1) continue;
-                
-                var headers = jsonData[0];
-                
-                // 해당 시트의 최대점수가 정의되지 않은 경우, 데이터에서 최대점수 자동 계산
-                if (!maxScores[sheetName]) {
-                    maxScores[sheetName] = {};
-                    console.log('최대점수 자동 계산 중:', sheetName);
-                    
-                    for (var j = 5; j < Math.min(14, headers.length); j++) {
-                        var subject = headers[j];
-                        if (subject) {
-                            var maxScore = 0;
-                            for (var i = 1; i < jsonData.length; i++) {
-                                var row = jsonData[i];
-                                if (row && row[j] !== null && row[j] !== undefined && row[j] !== '') {
-                                    var score = parseInt(row[j]);
-                                    if (!isNaN(score) && score > maxScore) {
-                                        maxScore = score;
-                                    }
-                                }
-                            }
-                            if (maxScore > 0) {
-                                maxScores[sheetName][subject] = maxScore;
-                                console.log('최대점수 설정:', subject, '=', maxScore);
-                            }
-                        }
-                    }
-                }
-                
-                // 학생 데이터 처리 시 비율 정보 사용
-                for (var i = 1; i < jsonData.length; i++) {
-                    var row = jsonData[i];
-                    if (!row || !row[0]) continue;
-                    
-                    var name = row[0];
-                    
-                    if (!studentsByName[name]) continue;
-                    
-                    var className = row[2];
-                    var grade = row[3];
-                    var score = row[4];
-                    var needScore = row[14];
-                    var gradeCut = row[15];
-                    
-                    var source = testSources[sheetName] || '';
-                    
-                    var details = {};
-                    var ratios = {};
-                    var sheetRatios = testRatios[sheetName] || {}; // 첫번째 시트에서 가져온 비율
-                    
-                    for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
-                        var subject = headers[j];
-                        var subjectScore = row[j];
-                        
-                        if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
-                            details[subject] = subjectScore;
-                            
-                            // 첫번째 시트에서 가져온 비율 사용, 없으면 최대점수로 계산
-                            if (sheetRatios[subject]) {
-                                ratios[subject] = sheetRatios[subject];
-                            } else {
-                                var maxScore = maxScores[sheetName] && maxScores[sheetName][subject];
-                                if (maxScore) {
-                                    ratios[subject] = Math.round((subjectScore / maxScore) * 100);
-                                }
-                            }
-                        }
-                    }
-                    
-                    studentsByName[name].grades[sheetName] = {
-                        grade: grade,
-                        score: score,
-                        className: className,
-                        details: details,
-                        ratios: ratios,
-                        needScore: needScore,
-                        gradeCut: gradeCut,
-                        source: source
-                    };
-                }
-            }
-            
-            // 3단계: 출결번호로 접근할 수 있도록 재구성
-            studentByNumber = {};
-            for (var attendanceNumber in attendanceToNameMap) {
-                var name = attendanceToNameMap[attendanceNumber];
-                if (studentsByName[name]) {
-                    studentByNumber[attendanceNumber] = studentsByName[name];
-                }
-            }
-            
-            window.discoveredTestSheets = testSheetNames;
-            window.attendanceToNameMap = attendanceToNameMap;
-            window.testRatios = testRatios; // 비율 정보도 저장
-            isDataLoaded = true;
-            
-            console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
-            console.log('비율 정보:', testRatios);
-        }
-
-        function showProgress(show) {
-            document.getElementById('progressContainer').style.display = show ? 'block' : 'none';
-        }
-        
-        function updateProgress(percent, message) {
-            var progressBar = document.getElementById('progressBar');
-            progressBar.style.width = percent + '%';
-            progressBar.textContent = message || (percent + '%');
-        }
-        
-        function showStatus(message, type) {
-            var statusDiv = document.getElementById('statusMessage');
-            statusDiv.textContent = message;
-            statusDiv.className = 'status ' + type;
-            statusDiv.style.display = 'block';
-            
-            if (type === 'success') {
-                setTimeout(function() {
-                    statusDiv.style.display = 'none';
-                }, 5000);
-            }
-        }
-        
-        function updateDataSummary() {
-            var summaryDiv = document.getElementById('dataSummary');
-            var gridDiv = document.getElementById('summaryGrid');
-            
-            var totalStudents = Object.keys(studentByNumber).length;
-            var mappingCount = window.attendanceToNameMap ? Object.keys(window.attendanceToNameMap).length : 0;
-            var discoveredSheets = window.discoveredTestSheets ? window.discoveredTestSheets.length : 0;
-            
-            var html = '<div class="summary-item"><div class="summary-value">' + mappingCount + '</div><div class="summary-label">매핑 테이블 학생수</div></div>';
-            html += '<div class="summary-item"><div class="summary-value">' + totalStudents + '</div><div class="summary-label">성적 데이터 학생수</div></div>';
-            html += '<div class="summary-item"><div class="summary-value">' + discoveredSheets + '</div><div class="summary-label">발견된 시트 수</div></div>';
-            
-            if (githubConfig.username && githubConfig.repo) {
-                html += '<div class="summary-item"><div class="summary-value" style="font-size: 0.9em;">' + githubConfig.username + '/' + githubConfig.repo + '</div><div class="summary-label">GitHub 저장소</div></div>';
-            }
-            
-            gridDiv.innerHTML = html;
-            summaryDiv.style.display = 'block';
-        }
-        
-        function updateDataStatus(message, isSuccess = false, lastUpdated = null) {
-            var statusMessage = document.getElementById('dataStatusMessage');
-            var noDataDiv = document.getElementById('noData');
-            
-            if (isSuccess && lastUpdated) {
-                var updateDate = new Date(lastUpdated);
-                var formattedDate = updateDate.toLocaleDateString('ko-KR') + ' ' + updateDate.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'});
-                statusMessage.innerHTML = message + '<br><small style="color: #666;">마지막 업데이트: ' + formattedDate + '</small>';
-                noDataDiv.style.background = '#d4edda';
-                noDataDiv.style.color = '#155724';
-                noDataDiv.style.border = '1px solid #c3e6cb';
-            } else {
-                statusMessage.innerHTML = message;
-                noDataDiv.style.background = '#f8f9fa';
-                noDataDiv.style.color = '#666';
-                noDataDiv.style.border = 'none';
-            }
-        }
-        
-        function updateStudentTab() {
-            var noDataDiv = document.getElementById('noData');
-            var searchBtn = document.getElementById('searchBtn');
-            
-            if (isDataLoaded && Object.keys(studentByNumber).length > 0) {
-                searchBtn.disabled = false;
-                
-                // 공유 가능한 URL 표시
-                if (githubConfig.username && githubConfig.repo) {
-                    var shareableUrl = window.location.origin + window.location.pathname + 
-                                     '?username=' + githubConfig.username + '&repo=' + githubConfig.repo;
-                    document.getElementById('shareableUrl').textContent = shareableUrl;
-                    document.getElementById('urlInfo').style.display = 'block';
-                }
-            } else {
-                searchBtn.disabled = true;
-                document.getElementById('urlInfo').style.display = 'none';
-            }
-        }
-
-        function searchStudent() {
-            if (!isDataLoaded) {
-                alert('데이터가 로드되지 않았습니다.');
-                return;
-            }
-            
-            var query = document.getElementById('searchInput').value.trim();
-            var resultsDiv = document.getElementById('results');
-            var noResultsDiv = document.getElementById('noResults');
-            var noDataDiv = document.getElementById('noData');
-            
-            resultsDiv.style.display = 'none';
-            noResultsDiv.style.display = 'none';
-            noDataDiv.style.display = 'none';
-            
-            if (!query) {
-                alert('출결번호를 입력해주세요.');
-                return;
-            }
-            
-            var student = studentByNumber[query];
-            
-            if (!student) {
-                noResultsDiv.style.display = 'block';
-                return;
-            }
-            
-            displayStudentInfo(student);
-            displaySummaryTable(student);
-            displayGrades(student.grades);
-            resultsDiv.style.display = 'block';
-        }
-
-        function displayStudentInfo(student) {
-            var studentInfoDiv = document.getElementById('studentInfo');
-            var gradeKeys = Object.keys(student.grades);
-            var totalTests = window.discoveredTestSheets ? window.discoveredTestSheets.length : 12;
-            var attendedTests = gradeKeys.length;
-            
-            studentInfoDiv.innerHTML = 
-                '<div class="student-info">' +
-                '<h2>👨‍🎓 ' + student.name + '</h2>' +
-                '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">' +
-                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">출결번호:</span><span style="color: #333; font-weight: bold;">' + student.attendanceNumber + '</span></div>' +
-                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">응시 현황:</span><span style="color: #333; font-weight: bold;">' + attendedTests + '/' + totalTests + '회</span></div>' +
-                '</div></div>';
-        }
-
-        function displaySummaryTable(student) {
-            var summaryTableDiv = document.getElementById('summaryTable');
-            
-            var allTests = window.discoveredTestSheets || ['모클1회', '모클2회', '모클3회'];
-            var totalTests = allTests.length;
-            
-            var tableHtml = '<div class="summary-table">';
-            tableHtml += '<h3>📊 전체 성적 현황 (' + totalTests + '개 시험)</h3>';
-            tableHtml += '<table class="grade-table">';
-            tableHtml += '<thead><tr>';
-            tableHtml += '<th class="test-name">시험</th>';
-            tableHtml += '<th>등급</th>';
-            tableHtml += '<th>점수</th>';
-            tableHtml += '<th>등급컷</th>';
-            tableHtml += '<th>출처</th>';
-            tableHtml += '</tr></thead><tbody>';
-            
-            for (var i = 0; i < allTests.length; i++) {
-                var testName = allTests[i];
-                var gradeData = student.grades[testName];
-                
-                tableHtml += '<tr>';
-                tableHtml += '<td class="test-name">' + testName + '</td>';
-                
-                if (gradeData) {
-                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '">' + gradeData.grade + '</td>';
-                    tableHtml += '<td class="score-cell">' + gradeData.score + '</td>';
-                    tableHtml += '<td class="score-cell">' + (gradeData.gradeCut || '-') + '</td>';
-                    tableHtml += '<td class="source-cell">' + (gradeData.source || '-') + '</td>';
-                } else {
-                    tableHtml += '<td class="absent-cell">미응시</td>';
-                    tableHtml += '<td class="absent-cell">-</td>';
-                    tableHtml += '<td class="absent-cell">-</td>';
-                    tableHtml += '<td class="absent-cell">-</td>';
-                }
-                
-                tableHtml += '</tr>';
-            }
-            
-            tableHtml += '</tbody></table></div>';
-            summaryTableDiv.innerHTML = tableHtml;
-        }
-
-        function displayGrades(grades) {
-            var gradeCardsDiv = document.getElementById('gradeCards');
-            gradeCardsDiv.innerHTML = '';
-            
-            var testNames = Object.keys(grades);
-            
-            for (var i = 0; i < testNames.length; i++) {
-                var testName = testNames[i];
-                var gradeData = grades[testName];
-                var gradeCard = document.createElement('div');
-                gradeCard.className = 'grade-card';
-                
-                var detailsHtml = '';
-                if (gradeData.details) {
-                    var detailKeys = Object.keys(gradeData.details);
-                    for (var j = 0; j < detailKeys.length; j++) {
-                        var subject = detailKeys[j];
-                        var score = gradeData.details[subject];
-                        var ratio = gradeData.ratios[subject] || 0;
-                        var ratioColor = ratio >= 80 ? '#e74c3c' : ratio >= 60 ? '#f39c12' : ratio >= 40 ? '#f1c40f' : '#95a5a6';
-                        
-                        detailsHtml += 
-                            '<div class="grade-item">' +
-                            '<span class="grade-label">' + subject + '</span>' +
-                            '<span class="grade-value">' + score + '점 ' +
-                            '<span style="color: ' + ratioColor + '; font-size: 0.85em;">(' + ratio + '%)</span>' +
-                            '</span></div>';
-                    }
-                }
-                
-                var cutInfo = '';
-                if (gradeData.gradeCut) {
-                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.gradeCut + '점</div><div class="grade-summary-label">내 등급컷</div></div>';
-                }
-                
-                if (gradeData.needScore !== null && gradeData.needScore !== undefined) {
-                    var needScoreDisplay = gradeData.needScore > 0 ? '+' + gradeData.needScore : gradeData.needScore;
-                    var needScoreColor = gradeData.needScore <= 0 ? '#2ecc71' : '#e74c3c';
-                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value" style="color: ' + needScoreColor + '">' + needScoreDisplay + '점</div><div class="grade-summary-label">한등급↑ 필요점수</div></div>';
-                }
-                
-                var sourceInfo = '';
-                if (gradeData.source && gradeData.source.trim() !== '') {
-                    sourceInfo = '<div class="grade-summary-item"><div class="grade-summary-value" style="font-size: 0.9em; color: #666;">' + gradeData.source + '</div><div class="grade-summary-label">출처</div></div>';
-                }
-                
-                gradeCard.innerHTML = 
-                    '<h3>📝 ' + testName + '</h3>' +
-                    '<div class="grade-summary">' +
-                    '<div class="grade-summary-item"><div class="grade-summary-value grade-' + gradeData.grade + '">' + gradeData.grade + '등급</div><div class="grade-summary-label">내 등급</div></div>' +
-                    '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.score + '점</div><div class="grade-summary-label">내 점수</div></div>' +
-                    cutInfo + sourceInfo + '</div>' +
-                    (detailsHtml ? '<div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 8px;"><h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">📊 과목별 성취도 (점수 및 비율)</h4><div class="grade-details">' + detailsHtml + '</div></div>' : '');
-                
-                gradeCardsDiv.appendChild(gradeCard);
-            }
-        }
-
-        // 이벤트 리스너
-        document.getElementById('searchInput').addEventListener('input', function(e) {
-            e.target.value = e.target.value.replace(/[^0-9]/g, '');
-            if (e.target.value.length > 4) {
-                e.target.value = e.target.value.slice(0, 4);
-            }
-        });
-
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                searchStudent();
-            }
-        });
-
-        // 페이지 로드 시 실행 (개선된 버전)
-        window.onload = function() {
-            console.log('페이지 로드 시작');
-            
-            // 1순위: URL 파라미터에서 설정 확인
-            var urlConfig = getConfigFromURL();
-            
-            // 2순위: 자동 감지 (GitHub Pages URL 분석)
-            var autoConfig = autoDetectConfig();
-            
-            // 3순위: 저장된 설정 불러오기
-            var savedConfig = localStorage.getItem('githubConfig');
-            var savedDataUrl = localStorage.getItem('dataUrl');
-            
-            var finalConfig = null;
-            var configSource = '';
-            
-            if (urlConfig) {
-                finalConfig = urlConfig;
-                configSource = 'URL 파라미터';
-            } else if (autoConfig) {
-                finalConfig = autoConfig;
-                configSource = '자동 감지';
-            } else if (savedConfig && savedDataUrl) {
-                try {
-                    finalConfig = JSON.parse(savedConfig);
-                    configSource = '저장된 설정';
-                } catch (error) {
-                    console.error('저장된 설정 파싱 실패:', error);
-                }
-            }
-            
-            if (finalConfig && finalConfig.username && finalConfig.repo) {
-                console.log('설정 사용 (' + configSource + '):', finalConfig);
-                
-                githubConfig = finalConfig;
-                dataUrl = `https://raw.githubusercontent.com/${finalConfig.username}/${finalConfig.repo}/main/grade-data.json`;
-                
-                // localStorage에 저장 (다음에 더 빠르게 로드하기 위해)
-                localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
-                localStorage.setItem('dataUrl', dataUrl);
-                
-                // 설정이 있으면 입력 필드에 채우기
-                document.getElementById('githubUsername').value = finalConfig.username || '';
-                document.getElementById('githubRepo').value = finalConfig.repo || '';
-                
-                // UI 전환
-                document.getElementById('githubSetup').style.display = 'none';
-                document.getElementById('uploadSection').style.display = 'block';
-                
-                console.log('데이터 로드 시작...');
-                // 약간의 지연 후 데이터 로드 시도
-                setTimeout(function() {
-                    loadDataFromGitHub();
-                }, 1000);
-                
-            } else {
-                console.log('설정을 찾을 수 없음');
-                updateDataStatus('GitHub 설정이 필요합니다. 관리자 탭에서 설정해주세요.');
-                
-                // 자동 감지 정보가 있다면 미리 채워주기
-                if (autoConfig) {
-                    document.getElementById('githubUsername').value = autoConfig.username || '';
-                    document.getElementById('githubRepo').value = autoConfig.repo || '';
-                }
-            }
-            
-            updateStudentTab();
-        };
-        
-        // 토큰 초기화 함수
-        function clearTokenField() {
-            document.getElementById('githubToken').value = '';
-            document.getElementById('githubToken').focus();
-            showStatus('토큰 필드가 초기화되었습니다. 새 토큰을 입력하세요.', 'success');
-        }
-        
-        // 현재 토큰 확인 함수
-        function checkCurrentToken() {
-            var token = document.getElementById('githubToken').value.trim();
-            
-            if (!token) {
-                showStatus('토큰이 입력되지 않았습니다.', 'error');
-                return;
-            }
-            
-            showStatus('토큰 유효성 검사 중...', 'warning');
-            
-            // GitHub API로 토큰 유효성 확인
-            fetch('https://api.github.com/user', {
-                headers: {
-                    'Authorization': 'token ' + token,
-                    'User-Agent': 'Grade-System'
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    throw new Error('토큰이 유효하지 않음 (상태: ' + response.status + ')');
-                }
-            })
-            .then(userData => {
-                showStatus('✅ 토큰이 유효합니다! 사용자: ' + userData.login, 'success');
-                
-                // 토큰 권한 확인
-                fetch('https://api.github.com/user/repos', {
-                    headers: {
-                        'Authorization': 'token ' + token,
-                        'User-Agent': 'Grade-System'
-                    }
-                })
-                .then(response => {
-                    if (response.ok) {
-                        showStatus('✅ 토큰 권한 확인 완료! repo 권한이 있습니다.', 'success');
-                    } else {
-                        showStatus('⚠️ 토큰은 유효하지만 repo 권한이 부족할 수 있습니다.', 'warning');
-                    }
-                })
-                .catch(error => {
-                    showStatus('⚠️ 권한 확인 실패: ' + error.message, 'warning');
-                });
-            })
-            .catch(error => {
-                showStatus('❌ ' + error.message, 'error');
-            });
-        }
-        
-        // 관리자 탭에서 디버그 버튼 표시
-        function showDebugButton() {
-            var debugSection = document.getElementById('debugSection');
-            if (debugSection) {
-                debugSection.style.display = 'block';
-                toggleDebug();
-            }
-        }
-        
-        // 디버그 정보 표시 함수 추가
-        function toggleDebug() {
-            var debugSection = document.getElementById('debugSection');
-            var debugInfo = document.getElementById('debugInfo');
-            
-            if (debugSection.style.display === 'none') {
-                debugSection.style.display = 'block';
-            }
-            
-            var info = '';
-            info += '<strong>🔍 현재 상태:</strong><br>';
-            info += '• isDataLoaded: ' + isDataLoaded + '<br>';
-            info += '• studentByNumber 개수: ' + Object.keys(studentByNumber).length + '<br>';
-            info += '• dataUrl: ' + (dataUrl || '설정되지 않음') + '<br>';
-            info += '• githubConfig: ' + JSON.stringify(githubConfig) + '<br><br>';
-            
-            info += '<strong>📊 데이터 구조:</strong><br>';
-            if (Object.keys(studentByNumber).length > 0) {
-                var firstStudent = Object.keys(studentByNumber)[0];
-                info += '• 첫 번째 학생 번호: ' + firstStudent + '<br>';
-                info += '• 학생 정보 샘플: ' + JSON.stringify(studentByNumber[firstStudent], null, 2).substring(0, 200) + '...<br>';
-            } else {
-                info += '• 학생 데이터 없음<br>';
-            }
-            
-            info += '<br><strong>🌐 네트워크 테스트:</strong><br>';
-            if (dataUrl) {
-                info += '• <a href="' + dataUrl + '" target="_blank">데이터 파일 직접 확인</a><br>';
-            }
-            
-            debugInfo.innerHTML = info;
-        }
-        
-        // 모든 설정 초기화 함수
-        function clearAllData() {
-            if (confirm('모든 설정과 데이터를 초기화하시겠습니까?')) {
-                localStorage.clear();
-                location.reload();
-            }
-        }
-        
-        // 토큰 초기화 함수
-        function clearTokenField() {
-            document.getElementById('githubToken').value = '';
-            document.getElementById('githubToken').focus();
-            showStatus('토큰 필드가 초기화되었습니다. 새 토큰을 입력하세요.', 'success');
-        }
-        
-        // 현재 토큰 확인 함수
-        function checkCurrentToken() {
-            var token = document.getElementById('githubToken').value.trim();
-            
-            if (!token) {
-                showStatus('토큰이 입력되지 않았습니다.', 'error');
-                return;
-            }
-            
-            showStatus('토큰 유효성 검사 중...', 'warning');
-            
-            // GitHub API로 토큰 유효성 확인
-            fetch('https://api.github.com/user', {
-                headers: {
-                    'Authorization': 'token ' + token,
-                    'User-Agent': 'Grade-System'
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    return response.json();
-                } else {
-                    throw new Error('토큰이 유효하지 않음 (상태: ' + response.status + ')');
-                }
-            })
-            .then(userData => {
-                showStatus('✅ 토큰이 유효합니다! 사용자: ' + userData.login, 'success');
-                
-                // 토큰 권한 확인
-                fetch('https://api.github.com/user/repos', {
-                    headers: {
-                        'Authorization': 'token ' + token,
-                        'User-Agent': 'Grade-System'
-                    }
-                })
-                .then(response => {
-                    if (response.ok) {
-                        showStatus('✅ 토큰 권한 확인 완료! repo 권한이 있습니다.', 'success');
-                    } else {
-                        showStatus('⚠️ 토큰은 유효하지만 repo 권한이 부족할 수 있습니다.', 'warning');
-                    }
-                })
-                .catch(error => {
-                    showStatus('⚠️ 권한 확인 실패: ' + error.message, 'warning');
-                });
-            })
-            .catch(error => {
-                showStatus('❌ ' + error.message, 'error');
-            });
-        }
-    </script>
-</body>
-</html>
+                    window.testRatios = data.testRatios || {};
