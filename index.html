@@ -549,9 +549,14 @@
                 <p>2. 저장소를 Public으로 설정하고 GitHub Pages를 활성화하세요</p>
                 <p>3. 아래에 저장소 정보를 입력하세요:</p>
                 
-                <input type="text" id="githubUsername" class="setup-input" placeholder="GitHub 사용자명 (예: myusername)">
-                <input type="text" id="githubRepo" class="setup-input" placeholder="저장소 이름 (예: grade-data)">
-                <input type="password" id="githubToken" class="setup-input" placeholder="GitHub Personal Access Token (선택사항)">
+                <input type="text" id="githubUsername" class="setup-input" placeholder="GitHub 사용자명 (예: myusername)" autocomplete="off">
+                <input type="text" id="githubRepo" class="setup-input" placeholder="저장소 이름 (예: grade-data)" autocomplete="off">
+                <input type="text" id="githubToken" class="setup-input" placeholder="GitHub Personal Access Token (선택사항)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                
+                <div style="margin: 15px 0;">
+                    <button onclick="clearTokenField()" class="setup-btn" style="background: #dc3545;">🗑️ 토큰 초기화</button>
+                    <button onclick="checkCurrentToken()" class="setup-btn" style="background: #28a745;">🔍 현재 토큰 확인</button>
+                </div>
                 
                 <button onclick="saveGitHubConfig()" class="setup-btn">설정 저장</button>
                 <button onclick="testGitHubConnection()" class="setup-btn">연결 테스트</button>
@@ -1576,6 +1581,73 @@
             updateStudentTab();
         };
         
+        // 토큰 초기화 함수
+        function clearTokenField() {
+            document.getElementById('githubToken').value = '';
+            document.getElementById('githubToken').focus();
+            showStatus('토큰 필드가 초기화되었습니다. 새 토큰을 입력하세요.', 'success');
+        }
+        
+        // 현재 토큰 확인 함수
+        function checkCurrentToken() {
+            var token = document.getElementById('githubToken').value.trim();
+            
+            if (!token) {
+                showStatus('토큰이 입력되지 않았습니다.', 'error');
+                return;
+            }
+            
+            showStatus('토큰 유효성 검사 중...', 'warning');
+            
+            // GitHub API로 토큰 유효성 확인
+            fetch('https://api.github.com/user', {
+                headers: {
+                    'Authorization': 'token ' + token,
+                    'User-Agent': 'Grade-System'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('토큰이 유효하지 않음 (상태: ' + response.status + ')');
+                }
+            })
+            .then(userData => {
+                showStatus('✅ 토큰이 유효합니다! 사용자: ' + userData.login, 'success');
+                
+                // 토큰 권한 확인
+                fetch('https://api.github.com/user/repos', {
+                    headers: {
+                        'Authorization': 'token ' + token,
+                        'User-Agent': 'Grade-System'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showStatus('✅ 토큰 권한 확인 완료! repo 권한이 있습니다.', 'success');
+                    } else {
+                        showStatus('⚠️ 토큰은 유효하지만 repo 권한이 부족할 수 있습니다.', 'warning');
+                    }
+                })
+                .catch(error => {
+                    showStatus('⚠️ 권한 확인 실패: ' + error.message, 'warning');
+                });
+            })
+            .catch(error => {
+                showStatus('❌ ' + error.message, 'error');
+            });
+        }
+        
+        // 관리자 탭에서 디버그 버튼 표시
+        function showDebugButton() {
+            var debugSection = document.getElementById('debugSection');
+            if (debugSection) {
+                debugSection.style.display = 'block';
+                toggleDebug();
+            }
+        }
+        
         // 디버그 정보 표시 함수 추가
         function toggleDebug() {
             var debugSection = document.getElementById('debugSection');
@@ -1617,13 +1689,62 @@
             }
         }
         
-        // 관리자 탭에서 디버그 버튼 표시
-        function showDebugButton() {
-            var debugSection = document.getElementById('debugSection');
-            if (debugSection) {
-                debugSection.style.display = 'block';
-                toggleDebug();
+        // 토큰 초기화 함수
+        function clearTokenField() {
+            document.getElementById('githubToken').value = '';
+            document.getElementById('githubToken').focus();
+            showStatus('토큰 필드가 초기화되었습니다. 새 토큰을 입력하세요.', 'success');
+        }
+        
+        // 현재 토큰 확인 함수
+        function checkCurrentToken() {
+            var token = document.getElementById('githubToken').value.trim();
+            
+            if (!token) {
+                showStatus('토큰이 입력되지 않았습니다.', 'error');
+                return;
             }
+            
+            showStatus('토큰 유효성 검사 중...', 'warning');
+            
+            // GitHub API로 토큰 유효성 확인
+            fetch('https://api.github.com/user', {
+                headers: {
+                    'Authorization': 'token ' + token,
+                    'User-Agent': 'Grade-System'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('토큰이 유효하지 않음 (상태: ' + response.status + ')');
+                }
+            })
+            .then(userData => {
+                showStatus('✅ 토큰이 유효합니다! 사용자: ' + userData.login, 'success');
+                
+                // 토큰 권한 확인
+                fetch('https://api.github.com/user/repos', {
+                    headers: {
+                        'Authorization': 'token ' + token,
+                        'User-Agent': 'Grade-System'
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        showStatus('✅ 토큰 권한 확인 완료! repo 권한이 있습니다.', 'success');
+                    } else {
+                        showStatus('⚠️ 토큰은 유효하지만 repo 권한이 부족할 수 있습니다.', 'warning');
+                    }
+                })
+                .catch(error => {
+                    showStatus('⚠️ 권한 확인 실패: ' + error.message, 'warning');
+                });
+            })
+            .catch(error => {
+                showStatus('❌ ' + error.message, 'error');
+            });
         }
     </script>
 </body>
