@@ -770,6 +770,7 @@
                     maxScores = Object.assign({}, maxScores, data.maxScores || {});
                     window.discoveredTestSheets = data.testSheets || [];
                     window.attendanceToNameMap = data.attendanceMap || {};
+                    window.testRatios = data.testRatios || {}; // 비율 정보도 복원
                     
                     var studentCount = Object.keys(studentByNumber).length;
                     console.log('로드된 학생 수:', studentCount);
@@ -937,6 +938,7 @@
                         maxScores: maxScores,
                         testSheets: window.discoveredTestSheets,
                         attendanceMap: window.attendanceToNameMap,
+                        testRatios: window.testRatios, // 비율 정보도 함께 저장
                         lastUpdated: new Date().toISOString()
                     };
                     
@@ -974,20 +976,22 @@
         function parseExcelData(workbook) {
             var attendanceToNameMap = {};
             var studentsByName = {};
-            var testSources = {};
+            var testSources = {}; // 시험별 출처 정보 저장
+            var testRatios = {}; // 시험별 비율 정보 저장
             
-            // 0단계: 첫번째 시트에서 시험 출처 정보 수집
+            // 0단계: 첫번째 시트에서 시험 출처 정보 및 비율 정보 수집
             var firstSheetName = workbook.SheetNames[0];
             if (workbook.Sheets[firstSheetName]) {
                 var firstSheet = workbook.Sheets[firstSheetName];
                 var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
                 
-                console.log('첫번째 시트에서 출처 정보 수집:', firstSheetName);
+                console.log('첫번째 시트에서 출처 및 비율 정보 수집:', firstSheetName);
                 
                 var sourceStartRow = -1;
                 var testNameColumn = -1;
                 var sourceColumn = 15; // P열
                 
+                // "시험출처" 헤더를 찾아서 그 아래부터 데이터 수집
                 for (var i = 0; i < firstSheetData.length; i++) {
                     var row = firstSheetData[i];
                     if (row) {
@@ -1007,6 +1011,7 @@
                     console.log('시험출처 헤더를 찾지 못함. 7행부터 시작');
                 }
                 
+                // 시험명이 있는 열 찾기 (첫번째 열부터 검색)
                 for (var col = 0; col < 5; col++) {
                     if (firstSheetData[sourceStartRow] && firstSheetData[sourceStartRow][col] && 
                         firstSheetData[sourceStartRow][col].toString().includes('모클')) {
@@ -1020,20 +1025,85 @@
                     testNameColumn = 0;
                 }
                 
+                // P열에서 출처 정보 수집하고, 해당 시트에서 비율 정보도 수집
                 for (var i = sourceStartRow; i < firstSheetData.length; i++) {
                     var row = firstSheetData[i];
-                    if (row && row[testNameColumn] && row[sourceColumn]) {
+                    if (row && row[testNameColumn]) {
                         var testName = row[testNameColumn].toString().trim();
-                        var source = row[sourceColumn].toString().trim();
                         
                         if (testName.includes('모클')) {
-                            testSources[testName] = source;
-                            console.log('출처 매핑:', testName, '->', source);
+                            // 출처 정보 수집
+                            if (row[sourceColumn]) {
+                                var source = row[sourceColumn].toString().trim();
+                                testSources[testName] = source;
+                                console.log('출처 매핑:', testName, '->', source);
+                            }
+                            
+                            // 해당 시트에서 비율 정보 수집 (과목별 비율)
+                            if (workbook.Sheets[testName]) {
+                                testRatios[testName] = extractRatiosFromSheet(workbook.Sheets[testName]);
+                                console.log('비율 정보 수집:', testName, testRatios[testName]);
+                            }
                         }
                     }
                 }
                 
                 console.log('수집된 시험 출처:', testSources);
+                console.log('수집된 비율 정보:', testRatios);
+            }
+            
+            // 각 시트에서 비율 정보 추출하는 함수
+            function extractRatiosFromSheet(worksheet) {
+                var sheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                var ratios = {};
+                
+                if (sheetData.length <= 1) return ratios;
+                
+                var headers = sheetData[0];
+                
+                // 비율이 있는 행 찾기 (보통 2번째 행이나 헤더 바로 아래)
+                for (var i = 1; i < Math.min(5, sheetData.length); i++) {
+                    var row = sheetData[i];
+                    if (!row) continue;
+                    
+                    // 첫 번째 셀이 "비율" 또는 "%" 관련 내용이거나, 숫자가 100 이하의 소수인 경우
+                    var isRatioRow = false;
+                    if (row[0] && (row[0].toString().includes('비율') || row[0].toString().includes('%'))) {
+                        isRatioRow = true;
+                    } else {
+                        // 과목별 데이터가 모두 0~100 사이의 숫자인지 확인
+                        var ratioCount = 0;
+                        for (var j = 5; j < Math.min(14, row.length); j++) {
+                            if (row[j] && !isNaN(row[j])) {
+                                var val = parseFloat(row[j]);
+                                if (val > 0 && val <= 100) {
+                                    ratioCount++;
+                                }
+                            }
+                        }
+                        if (ratioCount >= 3) { // 3개 이상의 과목에서 비율값이 있으면
+                            isRatioRow = true;
+                        }
+                    }
+                    
+                    if (isRatioRow) {
+                        // 과목별 비율 수집 (5~13열)
+                        for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
+                            var subject = headers[j];
+                            var ratioValue = row[j];
+                            
+                            if (subject && ratioValue !== null && ratioValue !== undefined && ratioValue !== '') {
+                                var ratio = parseFloat(ratioValue);
+                                if (!isNaN(ratio) && ratio > 0 && ratio <= 100) {
+                                    ratios[subject] = ratio;
+                                }
+                            }
+                        }
+                        break; // 첫 번째 비율 행만 사용
+                    }
+                }
+                
+                return ratios;
             }
             
             // 1단계: 2번째 시트에서 출결번호-이름 매핑 생성
@@ -1094,6 +1164,7 @@
                 
                 var headers = jsonData[0];
                 
+                // 해당 시트의 최대점수가 정의되지 않은 경우, 데이터에서 최대점수 자동 계산
                 if (!maxScores[sheetName]) {
                     maxScores[sheetName] = {};
                     console.log('최대점수 자동 계산 중:', sheetName);
@@ -1119,6 +1190,7 @@
                     }
                 }
                 
+                // 학생 데이터 처리 시 비율 정보 사용
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
                     if (!row || !row[0]) continue;
@@ -1137,7 +1209,7 @@
                     
                     var details = {};
                     var ratios = {};
-                    var sheetMaxScores = maxScores[sheetName] || {};
+                    var sheetRatios = testRatios[sheetName] || {}; // 첫번째 시트에서 가져온 비율
                     
                     for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
                         var subject = headers[j];
@@ -1146,9 +1218,14 @@
                         if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
                             details[subject] = subjectScore;
                             
-                            var maxScore = sheetMaxScores[subject];
-                            if (maxScore) {
-                                ratios[subject] = Math.round((subjectScore / maxScore) * 100);
+                            // 첫번째 시트에서 가져온 비율 사용, 없으면 최대점수로 계산
+                            if (sheetRatios[subject]) {
+                                ratios[subject] = sheetRatios[subject];
+                            } else {
+                                var maxScore = maxScores[sheetName] && maxScores[sheetName][subject];
+                                if (maxScore) {
+                                    ratios[subject] = Math.round((subjectScore / maxScore) * 100);
+                                }
                             }
                         }
                     }
@@ -1177,9 +1254,11 @@
             
             window.discoveredTestSheets = testSheetNames;
             window.attendanceToNameMap = attendanceToNameMap;
+            window.testRatios = testRatios; // 비율 정보도 저장
             isDataLoaded = true;
             
             console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
+            console.log('비율 정보:', testRatios);
         }
 
         function showProgress(show) {
