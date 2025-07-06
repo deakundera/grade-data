@@ -483,6 +483,18 @@
             color: #333;
         }
         
+        .ratio-good {
+            color: #28a745;
+        }
+        
+        .ratio-average {
+            color: #ffc107;
+        }
+        
+        .ratio-poor {
+            color: #dc3545;
+        }
+        
         .grade-1 { color: #e74c3c; }
         .grade-2 { color: #f39c12; }
         .grade-3 { color: #f1c40f; }
@@ -617,6 +629,7 @@
                     <p>• 엑셀 파일을 업로드하여 성적 데이터를 GitHub에 저장합니다</p>
                     <p>• 업로드된 데이터는 모든 기기에서 접근 가능합니다</p>
                     <p>• 지원 파일 형식: .xlsx, .xls</p>
+                    <p>• <strong>모클 13회, 14회 등 새로운 데이터가 추가된 엑셀 파일을 업로드하면 자동으로 기존 데이터와 병합됩니다</strong></p>
                 </div>
                 
                 <div class="upload-area" id="uploadArea">
@@ -648,6 +661,7 @@
         var dataUrl = '';
         var isAdminAuthenticated = false;
         
+        // 기본 maxScores 설정 (엑셀 파일에서 자동으로 업데이트됨)
         var maxScores = {
             "모클1회": {"화법과 작문": 22, "문법": 11, "독서(인문)": 9, "독서(사회)": 11, "독서(과학)": 13, "문학(현대시)": 7, "문학(현대소설)": 7, "문학(고전시가)": 11, "문학(고전소설)": 9},
             "모클2회": {"화법과 작문": 22, "문법": 12, "독서(인문)": 12, "독서(사회)": 11, "독서(기술)": 9, "문학(현대시)": 7, "문학(현대소설)": 9, "문학(고전시가)": 7, "문학(고전소설)": 11},
@@ -1055,11 +1069,16 @@
             reader.readAsArrayBuffer(file);
         }
 
+        // 수정된 parseExcelData 함수 - 화법과 작문 비율 문제 해결
         function parseExcelData(workbook) {
             var attendanceToNameMap = {};
             var studentsByName = {};
             var testSources = {};
             
+            console.log('엑셀 데이터 파싱 시작...');
+            console.log('시트 목록:', workbook.SheetNames);
+            
+            // 첫번째 시트에서 출처 정보 수집
             var firstSheetName = workbook.SheetNames[0];
             if (workbook.Sheets[firstSheetName]) {
                 var firstSheet = workbook.Sheets[firstSheetName];
@@ -1067,59 +1086,23 @@
                 
                 console.log('첫번째 시트에서 출처 정보 수집:', firstSheetName);
                 
-                var sourceStartRow = -1;
-                var testNameColumn = -1;
+                // 시험출처 열 찾기 (보통 15번째 열)
                 var sourceColumn = 15;
                 
+                // 성적표에서 각 모클회차별 출처 정보 추출
                 for (var i = 0; i < firstSheetData.length; i++) {
                     var row = firstSheetData[i];
-                    if (row) {
-                        for (var j = 0; j < row.length; j++) {
-                            if (row[j] && row[j].toString().includes('시험출처')) {
-                                sourceStartRow = i + 1;
-                                console.log('시험출처 헤더 발견, 데이터 시작 행:', sourceStartRow + 1);
-                                break;
-                            }
-                        }
-                        if (sourceStartRow !== -1) break;
-                    }
-                }
-                
-                if (sourceStartRow === -1) {
-                    sourceStartRow = 6;
-                    console.log('시험출처 헤더를 찾지 못함. 7행부터 시작');
-                }
-                
-                for (var col = 0; col < 5; col++) {
-                    if (firstSheetData[sourceStartRow] && firstSheetData[sourceStartRow][col] && 
-                        firstSheetData[sourceStartRow][col].toString().includes('모클')) {
-                        testNameColumn = col;
-                        console.log('시험명 열 발견:', col + 1, '열');
-                        break;
-                    }
-                }
-                
-                if (testNameColumn === -1) {
-                    testNameColumn = 0;
-                }
-                
-                for (var i = sourceStartRow; i < firstSheetData.length; i++) {
-                    var row = firstSheetData[i];
-                    if (row && row[testNameColumn] && row[sourceColumn]) {
-                        var testName = row[testNameColumn].toString().trim();
+                    if (row && row[1] && row[1].toString().includes('모클') && row[sourceColumn]) {
+                        var testName = row[1].toString().trim();
                         var source = row[sourceColumn].toString().trim();
-                        
-                        if (testName.includes('모클')) {
-                            testSources[testName] = source;
-                            console.log('출처 매핑:', testName, '->', source);
-                        }
+                        testSources[testName] = source;
+                        console.log('출처 매핑:', testName, '->', source);
                     }
                 }
-                
-                console.log('수집된 시험 출처:', testSources);
             }
             
-            var mappingSheetName = workbook.SheetNames[1];
+            // 출결번호 매핑 시트에서 데이터 추출
+            var mappingSheetName = workbook.SheetNames[1]; // 두번째 시트가 출결번호 시트
             if (workbook.Sheets[mappingSheetName]) {
                 var mappingSheet = workbook.Sheets[mappingSheetName];
                 var mappingData = XLSX.utils.sheet_to_json(mappingSheet, {header: 1});
@@ -1146,6 +1129,7 @@
                 console.log('총 매핑된 학생 수:', Object.keys(attendanceToNameMap).length);
             }
             
+            // 모클 시트들 찾기 및 정렬
             var allSheetNames = workbook.SheetNames;
             var testSheetNames = [];
             
@@ -1156,6 +1140,7 @@
                 }
             }
             
+            // 시트 이름을 숫자 순서로 정렬
             testSheetNames.sort(function(a, b) {
                 var numA = parseInt(a.match(/\d+/));
                 var numB = parseInt(b.match(/\d+/));
@@ -1164,6 +1149,7 @@
             
             console.log('발견된 모클 시트들:', testSheetNames);
             
+            // 각 모클 시트에서 데이터 추출
             for (var s = 0; s < testSheetNames.length; s++) {
                 var sheetName = testSheetNames[s];
                 if (!workbook.Sheets[sheetName]) continue;
@@ -1174,14 +1160,17 @@
                 if (jsonData.length <= 1) continue;
                 
                 var headers = jsonData[0];
+                console.log(sheetName + ' 헤더:', headers);
                 
+                // 최대점수 자동 계산 및 업데이트
                 if (!maxScores[sheetName]) {
                     maxScores[sheetName] = {};
                     console.log('최대점수 자동 계산 중:', sheetName);
                     
+                    // 과목별 최대점수 계산 (5번째 열부터 시작)
                     for (var j = 5; j < Math.min(14, headers.length); j++) {
                         var subject = headers[j];
-                        if (subject) {
+                        if (subject && subject.toString().trim()) {
                             var maxScore = 0;
                             for (var i = 1; i < jsonData.length; i++) {
                                 var row = jsonData[i];
@@ -1200,6 +1189,7 @@
                     }
                 }
                 
+                // 각 학생의 성적 데이터 처리
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
                     if (!row || !row[0]) continue;
@@ -1216,6 +1206,7 @@
                     
                     var source = testSources[sheetName] || '';
                     
+                    // 과목별 점수 및 비율 계산
                     var details = {};
                     var ratios = {};
                     var sheetMaxScores = maxScores[sheetName] || {};
@@ -1227,9 +1218,11 @@
                         if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
                             details[subject] = subjectScore;
                             
+                            // 비율 계산
                             var maxScore = sheetMaxScores[subject];
-                            if (maxScore) {
-                                ratios[subject] = Math.round((subjectScore / maxScore) * 100);
+                            if (maxScore && maxScore > 0) {
+                                var ratio = (subjectScore / maxScore);
+                                ratios[subject] = Math.round(ratio * 10000) / 10000; // 소수점 4자리까지
                             }
                         }
                     }
@@ -1247,12 +1240,44 @@
                 }
             }
             
-            studentByNumber = {};
+            // 기존 데이터와 병합 (자동 갱신 기능)
+            console.log('기존 데이터와 병합 중...');
+            var existingStudentCount = Object.keys(studentByNumber).length;
+            
+            // 새로운 데이터로 출결번호별 학생 데이터 생성
+            var newStudentByNumber = {};
             for (var attendanceNumber in attendanceToNameMap) {
                 var name = attendanceToNameMap[attendanceNumber];
                 if (studentsByName[name]) {
-                    studentByNumber[attendanceNumber] = studentsByName[name];
+                    newStudentByNumber[attendanceNumber] = studentsByName[name];
                 }
+            }
+            
+            // 기존 데이터와 병합
+            if (existingStudentCount > 0) {
+                console.log('기존 학생 데이터 수:', existingStudentCount);
+                
+                for (var attendanceNumber in newStudentByNumber) {
+                    var newStudent = newStudentByNumber[attendanceNumber];
+                    
+                    if (studentByNumber[attendanceNumber]) {
+                        // 기존 학생의 데이터 업데이트
+                        var existingStudent = studentByNumber[attendanceNumber];
+                        
+                        // 새로운 모클 데이터만 추가/업데이트
+                        for (var testName in newStudent.grades) {
+                            existingStudent.grades[testName] = newStudent.grades[testName];
+                            console.log('업데이트:', existingStudent.name, testName);
+                        }
+                    } else {
+                        // 새로운 학생 추가
+                        studentByNumber[attendanceNumber] = newStudent;
+                        console.log('새 학생 추가:', newStudent.name);
+                    }
+                }
+            } else {
+                // 처음 업로드인 경우
+                studentByNumber = newStudentByNumber;
             }
             
             window.discoveredTestSheets = testSheetNames;
@@ -1260,6 +1285,7 @@
             isDataLoaded = true;
             
             console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
+            console.log('발견된 모클 시트 수:', testSheetNames.length);
         }
 
         function showProgress(show) {
@@ -1440,6 +1466,13 @@
             
             var testNames = Object.keys(grades);
             
+            // 모클 순서대로 정렬
+            testNames.sort(function(a, b) {
+                var numA = parseInt(a.match(/\d+/));
+                var numB = parseInt(b.match(/\d+/));
+                return numA - numB;
+            });
+            
             for (var i = 0; i < testNames.length; i++) {
                 var testName = testNames[i];
                 var gradeData = grades[testName];
@@ -1447,19 +1480,25 @@
                 gradeCard.className = 'grade-card';
                 
                 var detailsHtml = '';
-                if (gradeData.details) {
+                if (gradeData.details && gradeData.ratios) {
                     var detailKeys = Object.keys(gradeData.details);
                     for (var j = 0; j < detailKeys.length; j++) {
                         var subject = detailKeys[j];
                         var score = gradeData.details[subject];
-                        var ratio = gradeData.ratios[subject] || 0;
-                        var ratioColor = ratio >= 80 ? '#e74c3c' : ratio >= 60 ? '#f39c12' : ratio >= 40 ? '#f1c40f' : '#95a5a6';
+                        var ratio = gradeData.ratios[subject];
+                        
+                        // 비율을 백분율로 변환하고 색상 결정
+                        var ratioPercent = ratio ? Math.round(ratio * 100) : 0;
+                        var ratioClass = '';
+                        if (ratioPercent >= 80) ratioClass = 'ratio-good';
+                        else if (ratioPercent >= 60) ratioClass = 'ratio-average';
+                        else ratioClass = 'ratio-poor';
                         
                         detailsHtml += 
                             '<div class="grade-item">' +
                             '<span class="grade-label">' + subject + '</span>' +
                             '<span class="grade-value">' + score + '점 ' +
-                            '<span style="color: ' + ratioColor + '; font-size: 0.85em;">(' + ratio + '%)</span>' +
+                            '<span class="' + ratioClass + '" style="font-size: 0.85em;">(' + ratioPercent + '%)</span>' +
                             '</span></div>';
                     }
                 }
