@@ -552,7 +552,7 @@
             <div class="instructions">
                 <h3>📋 성적 조회 방법</h3>
                 <p>• <strong>출결번호로 검색:</strong> 본인의 4자리 출결번호를 입력하세요</p>
-                <p>• 예시: 3188, 6167, 2304 등</p>
+                <p>• 예시: 3188, 2274, 4051 등</p>
                 <div id="urlInfo" style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #4caf50; display: none;">
                     <strong>💡 더 쉬운 접속 방법:</strong><br>
                     다음 URL을 북마크하면 어떤 기기에서든 바로 사용할 수 있습니다:<br>
@@ -1078,23 +1078,25 @@
             console.log('엑셀 데이터 파싱 시작...');
             console.log('시트 목록:', workbook.SheetNames);
             
-            // 첫번째 시트에서 출처 정보 수집
+            // 첫번째 시트 (성적표)에서 데이터 추출
             var firstSheetName = workbook.SheetNames[0];
             if (workbook.Sheets[firstSheetName]) {
                 var firstSheet = workbook.Sheets[firstSheetName];
                 var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
                 
-                console.log('첫번째 시트에서 출처 정보 수집:', firstSheetName);
+                console.log('성적표에서 데이터 추출:', firstSheetName);
                 
-                // 시험출처 열 찾기 (보통 15번째 열)
-                var sourceColumn = 15;
+                // 헤더 행 찾기 (4번째 행)
+                var headerRowIndex = 4;
+                var headers = firstSheetData[headerRowIndex];
+                console.log('성적표 헤더:', headers);
                 
-                // 성적표에서 각 모클회차별 출처 정보 추출
-                for (var i = 0; i < firstSheetData.length; i++) {
+                // 성적표에서 각 모클회차별 데이터 추출 (이미 계산된 비율 사용)
+                for (var i = headerRowIndex + 1; i < firstSheetData.length; i++) {
                     var row = firstSheetData[i];
-                    if (row && row[1] && row[1].toString().includes('모클') && row[sourceColumn]) {
+                    if (row && row[1] && row[1].toString().includes('모클')) {
                         var testName = row[1].toString().trim();
-                        var source = row[sourceColumn].toString().trim();
+                        var source = row[15] ? row[15].toString().trim() : '';
                         testSources[testName] = source;
                         console.log('출처 매핑:', testName, '->', source);
                     }
@@ -1129,6 +1131,60 @@
                 console.log('총 매핑된 학생 수:', Object.keys(attendanceToNameMap).length);
             }
             
+            // 성적표에서 학생별 성적 데이터 추출
+            if (workbook.Sheets[firstSheetName]) {
+                var firstSheet = workbook.Sheets[firstSheetName];
+                var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
+                
+                // 학생 이름으로 데이터 찾기
+                for (var attendanceNumber in attendanceToNameMap) {
+                    var name = attendanceToNameMap[attendanceNumber];
+                    if (!studentsByName[name]) continue;
+                    
+                    // 헤더 행 (4번째 행)
+                    var headerRowIndex = 4;
+                    var headers = firstSheetData[headerRowIndex];
+                    
+                    // 각 모클회차별 데이터 추출
+                    for (var i = headerRowIndex + 1; i < firstSheetData.length; i++) {
+                        var row = firstSheetData[i];
+                        if (row && row[1] && row[1].toString().includes('모클')) {
+                            var testName = row[1].toString().trim();
+                            
+                            var grade = row[3];
+                            var score = row[4];
+                            var needScore = row[5];
+                            var source = testSources[testName] || '';
+                            
+                            // 과목별 비율 추출 (이미 계산된 비율 사용)
+                            var ratios = {};
+                            var details = {}; // 실제 점수는 개별 시트에서 가져오기
+                            
+                            // 성적표의 6번째 열부터 과목별 비율
+                            for (var j = 6; j < Math.min(15, headers.length); j++) {
+                                var subject = headers[j];
+                                var ratio = row[j];
+                                
+                                if (subject && ratio !== null && ratio !== undefined && ratio !== '') {
+                                    ratios[subject] = ratio; // 이미 0~1 사이의 비율값
+                                }
+                            }
+                            
+                            studentsByName[name].grades[testName] = {
+                                grade: grade,
+                                score: score,
+                                className: '', // 개별 시트에서 채울 예정
+                                details: details, // 개별 시트에서 채울 예정
+                                ratios: ratios,
+                                needScore: needScore,
+                                gradeCut: '', // 개별 시트에서 채울 예정
+                                source: source
+                            };
+                        }
+                    }
+                }
+            }
+            
             // 모클 시트들 찾기 및 정렬
             var allSheetNames = workbook.SheetNames;
             var testSheetNames = [];
@@ -1149,7 +1205,7 @@
             
             console.log('발견된 모클 시트들:', testSheetNames);
             
-            // 각 모클 시트에서 데이터 추출
+            // 각 모클 시트에서 추가 정보 (실제 점수, 학급명, 등급컷) 추출
             for (var s = 0; s < testSheetNames.length; s++) {
                 var sheetName = testSheetNames[s];
                 if (!workbook.Sheets[sheetName]) continue;
@@ -1162,7 +1218,7 @@
                 var headers = jsonData[0];
                 console.log(sheetName + ' 헤더:', headers);
                 
-                // 최대점수 자동 계산 및 업데이트
+                // 최대점수 자동 계산 (필요한 경우를 위해)
                 if (!maxScores[sheetName]) {
                     maxScores[sheetName] = {};
                     console.log('최대점수 자동 계산 중:', sheetName);
@@ -1189,27 +1245,20 @@
                     }
                 }
                 
-                // 각 학생의 성적 데이터 처리
+                // 각 학생의 상세 정보 (실제 점수, 학급명, 등급컷) 보완
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
                     if (!row || !row[0]) continue;
                     
                     var name = row[0];
                     
-                    if (!studentsByName[name]) continue;
+                    if (!studentsByName[name] || !studentsByName[name].grades[sheetName]) continue;
                     
                     var className = row[2];
-                    var grade = row[3];
-                    var score = row[4];
-                    var needScore = row[14];
                     var gradeCut = row[15];
                     
-                    var source = testSources[sheetName] || '';
-                    
-                    // 과목별 점수 및 비율 계산
+                    // 과목별 실제 점수 추출
                     var details = {};
-                    var ratios = {};
-                    var sheetMaxScores = maxScores[sheetName] || {};
                     
                     for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
                         var subject = headers[j];
@@ -1217,26 +1266,13 @@
                         
                         if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
                             details[subject] = subjectScore;
-                            
-                            // 비율 계산
-                            var maxScore = sheetMaxScores[subject];
-                            if (maxScore && maxScore > 0) {
-                                var ratio = (subjectScore / maxScore);
-                                ratios[subject] = Math.round(ratio * 10000) / 10000; // 소수점 4자리까지
-                            }
                         }
                     }
                     
-                    studentsByName[name].grades[sheetName] = {
-                        grade: grade,
-                        score: score,
-                        className: className,
-                        details: details,
-                        ratios: ratios,
-                        needScore: needScore,
-                        gradeCut: gradeCut,
-                        source: source
-                    };
+                    // 기존 데이터에 상세 정보 추가
+                    studentsByName[name].grades[sheetName].className = className;
+                    studentsByName[name].grades[sheetName].details = details;
+                    studentsByName[name].grades[sheetName].gradeCut = gradeCut;
                 }
             }
             
