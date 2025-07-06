@@ -508,6 +508,11 @@
                 <h3>📋 성적 조회 방법</h3>
                 <p>• <strong>출결번호로 검색:</strong> 본인의 4자리 출결번호를 입력하세요</p>
                 <p>• 예시: 3188, 6167, 2304 등</p>
+                <div id="urlInfo" style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #4caf50; display: none;">
+                    <strong>💡 더 쉬운 접속 방법:</strong><br>
+                    다음 URL을 북마크하면 어떤 기기에서든 바로 사용할 수 있습니다:<br>
+                    <code id="shareableUrl" style="background: white; padding: 5px; border-radius: 4px; font-size: 0.9em;"></code>
+                </div>
             </div>
             
             <div class="search-section">
@@ -614,7 +619,45 @@
             "모클3회": {"화법과 작문": 13, "문법": 11, "독서(인문)": 20, "독서(사회)": 9, "독서(기술)": 9, "문학(현대시)": 7, "문학(현대소설)": 9, "문학(고전시가)": 13, "문학(고전소설)": 9},
         };
 
-        // GitHub 설정 저장
+        // URL 파라미터에서 GitHub 설정 자동 추출
+        function getConfigFromURL() {
+            var urlParams = new URLSearchParams(window.location.search);
+            var username = urlParams.get('username');
+            var repo = urlParams.get('repo');
+            
+            if (username && repo) {
+                console.log('URL에서 설정 발견:', username, repo);
+                return {
+                    username: username,
+                    repo: repo,
+                    token: '' // URL에는 토큰 포함하지 않음 (보안상)
+                };
+            }
+            return null;
+        }
+        
+        // GitHub 저장소 URL에서 자동으로 설정 추출
+        function autoDetectConfig() {
+            // 현재 사이트의 URL에서 GitHub 정보 추출
+            var hostname = window.location.hostname;
+            var pathname = window.location.pathname;
+            
+            // GitHub Pages URL 패턴: username.github.io/repo-name
+            if (hostname.includes('.github.io')) {
+                var username = hostname.split('.')[0];
+                var repo = pathname.split('/')[1];
+                
+                if (username && repo) {
+                    console.log('자동 감지된 설정:', username, repo);
+                    return {
+                        username: username,
+                        repo: repo,
+                        token: ''
+                    };
+                }
+            }
+            return null;
+        }
         function saveGitHubConfig() {
             var username = document.getElementById('githubUsername').value.trim();
             var repo = document.getElementById('githubRepo').value.trim();
@@ -1207,8 +1250,17 @@
             
             if (isDataLoaded && Object.keys(studentByNumber).length > 0) {
                 searchBtn.disabled = false;
+                
+                // 공유 가능한 URL 표시
+                if (githubConfig.username && githubConfig.repo) {
+                    var shareableUrl = window.location.origin + window.location.pathname + 
+                                     '?username=' + githubConfig.username + '&repo=' + githubConfig.repo;
+                    document.getElementById('shareableUrl').textContent = shareableUrl;
+                    document.getElementById('urlInfo').style.display = 'block';
+                }
             } else {
                 searchBtn.disabled = true;
+                document.getElementById('urlInfo').style.display = 'none';
             }
         }
 
@@ -1379,45 +1431,67 @@
         window.onload = function() {
             console.log('페이지 로드 시작');
             
-            // 저장된 GitHub 설정 불러오기
+            // 1순위: URL 파라미터에서 설정 확인
+            var urlConfig = getConfigFromURL();
+            
+            // 2순위: 자동 감지 (GitHub Pages URL 분석)
+            var autoConfig = autoDetectConfig();
+            
+            // 3순위: 저장된 설정 불러오기
             var savedConfig = localStorage.getItem('githubConfig');
             var savedDataUrl = localStorage.getItem('dataUrl');
             
-            console.log('저장된 설정:', savedConfig ? '있음' : '없음');
-            console.log('저장된 URL:', savedDataUrl);
+            var finalConfig = null;
+            var configSource = '';
             
-            if (savedConfig && savedDataUrl) {
+            if (urlConfig) {
+                finalConfig = urlConfig;
+                configSource = 'URL 파라미터';
+            } else if (autoConfig) {
+                finalConfig = autoConfig;
+                configSource = '자동 감지';
+            } else if (savedConfig && savedDataUrl) {
                 try {
-                    githubConfig = JSON.parse(savedConfig);
-                    dataUrl = savedDataUrl;
-                    
-                    console.log('GitHub 설정 복원:', githubConfig);
-                    console.log('데이터 URL:', dataUrl);
-                    
-                    // 설정이 있으면 입력 필드에 채우기
-                    document.getElementById('githubUsername').value = githubConfig.username || '';
-                    document.getElementById('githubRepo').value = githubConfig.repo || '';
-                    if (githubConfig.token) {
-                        document.getElementById('githubToken').value = githubConfig.token;
-                    }
-                    
-                    // UI 전환
-                    document.getElementById('githubSetup').style.display = 'none';
-                    document.getElementById('uploadSection').style.display = 'block';
-                    
-                    console.log('데이터 로드 시작...');
-                    // 약간의 지연 후 데이터 로드 시도
-                    setTimeout(function() {
-                        loadDataFromGitHub();
-                    }, 1000);
-                    
+                    finalConfig = JSON.parse(savedConfig);
+                    configSource = '저장된 설정';
                 } catch (error) {
-                    console.error('설정 로드 실패:', error);
-                    updateDataStatus('설정 로드 실패. 관리자 탭에서 다시 설정해주세요.');
+                    console.error('저장된 설정 파싱 실패:', error);
                 }
+            }
+            
+            if (finalConfig && finalConfig.username && finalConfig.repo) {
+                console.log('설정 사용 (' + configSource + '):', finalConfig);
+                
+                githubConfig = finalConfig;
+                dataUrl = `https://raw.githubusercontent.com/${finalConfig.username}/${finalConfig.repo}/main/grade-data.json`;
+                
+                // localStorage에 저장 (다음에 더 빠르게 로드하기 위해)
+                localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
+                localStorage.setItem('dataUrl', dataUrl);
+                
+                // 설정이 있으면 입력 필드에 채우기
+                document.getElementById('githubUsername').value = finalConfig.username || '';
+                document.getElementById('githubRepo').value = finalConfig.repo || '';
+                
+                // UI 전환
+                document.getElementById('githubSetup').style.display = 'none';
+                document.getElementById('uploadSection').style.display = 'block';
+                
+                console.log('데이터 로드 시작...');
+                // 약간의 지연 후 데이터 로드 시도
+                setTimeout(function() {
+                    loadDataFromGitHub();
+                }, 1000);
+                
             } else {
-                console.log('저장된 설정이 없음');
+                console.log('설정을 찾을 수 없음');
                 updateDataStatus('GitHub 설정이 필요합니다. 관리자 탭에서 설정해주세요.');
+                
+                // 자동 감지 정보가 있다면 미리 채워주기
+                if (autoConfig) {
+                    document.getElementById('githubUsername').value = autoConfig.username || '';
+                    document.getElementById('githubRepo').value = autoConfig.repo || '';
+                }
             }
             
             updateStudentTab();
