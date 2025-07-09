@@ -1535,22 +1535,22 @@
             tableHtml += '<div class="summary-table" style="margin-top: 30px;">';
             tableHtml += '<h3>📈 과목별 성취도 비율 현황</h3>';
             tableHtml += '<div style="overflow-x: auto;">';
-            tableHtml += '<table class="grade-table" style="min-width: 1200px;">';
+            tableHtml += '<table class="grade-table" style="min-width: 1200px; font-size: 0.8em;">';
             tableHtml += '<thead><tr>';
-            tableHtml += '<th style="min-width: 80px;">시험</th>';
-            tableHtml += '<th style="min-width: 50px;">등급</th>';
-            tableHtml += '<th style="min-width: 50px;">점수</th>';
-            tableHtml += '<th style="min-width: 60px;">등급컷 필요점수</th>';
-            tableHtml += '<th style="min-width: 80px;">화법과 작문</th>';
-            tableHtml += '<th style="min-width: 60px;">문법</th>';
-            tableHtml += '<th style="min-width: 80px;">독서(인문)</th>';
-            tableHtml += '<th style="min-width: 80px;">독서(사회)</th>';
-            tableHtml += '<th style="min-width: 80px;">독서(과학)</th>';
-            tableHtml += '<th style="min-width: 80px;">문학(현대시)</th>';
-            tableHtml += '<th style="min-width: 90px;">문학(현대소설)</th>';
-            tableHtml += '<th style="min-width: 90px;">문학(고전시가)</th>';
-            tableHtml += '<th style="min-width: 90px;">문학(고전소설)</th>';
-            tableHtml += '<th style="min-width: 70px;">시험출처</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">시험</th>';
+            tableHtml += '<th style="min-width: 50px; font-size: 0.85em;">등급</th>';
+            tableHtml += '<th style="min-width: 50px; font-size: 0.85em;">점수</th>';
+            tableHtml += '<th style="min-width: 60px; font-size: 0.85em;">등급컷 필요점수</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">화법과 작문</th>';
+            tableHtml += '<th style="min-width: 60px; font-size: 0.85em;">문법</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(인문)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(사회)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(과학)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">문학(현대시)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(현대소설)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(고전시가)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(고전소설)</th>';
+            tableHtml += '<th style="min-width: 70px; font-size: 0.85em;">시험출처</th>';
             tableHtml += '</tr></thead><tbody>';
             
             for (var i = 0; i < allTests.length; i++) {
@@ -1558,18 +1558,18 @@
                 var gradeData = student.grades[testName];
                 
                 tableHtml += '<tr>';
-                tableHtml += '<td class="test-name">' + testName + '</td>';
+                tableHtml += '<td class="test-name" style="font-size: 0.85em;">' + testName + '</td>';
                 
                 if (gradeData) {
-                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '">' + gradeData.grade + '</td>';
-                    tableHtml += '<td class="score-cell">' + gradeData.score + '</td>';
+                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '" style="font-size: 0.85em;">' + gradeData.grade + '</td>';
+                    tableHtml += '<td class="score-cell" style="font-size: 0.85em;">' + gradeData.score + '</td>';
                     
                     // 등급컷 필요점수
                     var needScoreDisplay = '';
                     if (gradeData.needScore !== null && gradeData.needScore !== undefined) {
                         needScoreDisplay = gradeData.needScore > 0 ? '(' + gradeData.needScore + ')' : '(' + gradeData.needScore + ')';
                     }
-                    tableHtml += '<td class="score-cell">' + needScoreDisplay + '</td>';
+                    tableHtml += '<td class="score-cell" style="font-size: 0.85em;">' + needScoreDisplay + '</td>';
                     
                     // 각 과목별 비율 - 순서에 맞춰 표시
                     var subjectOrder = ['화법과 작문', '문법', '독서(인문)', '독서(사회)', '독서(과학)', 
@@ -1592,19 +1592,19 @@
                                         ratio >= 60 ? '#2ecc71' : ratio >= 50 ? '#3498db' : '#95a5a6';
                         var ratioText = ratio > 0 ? ratio + '%' : '-';
                         
-                        tableHtml += '<td style="color: ' + ratioColor + '; font-weight: bold; text-align: center;">' + ratioText + '</td>';
+                        tableHtml += '<td style="color: ' + ratioColor + '; font-weight: bold; text-align: center; font-size: 0.85em;">' + ratioText + '</td>';
                     }
                     
-                    tableHtml += '<td class="source-cell">' + (gradeData.source || '-') + '</td>';
+                    tableHtml += '<td class="source-cell" style="font-size: 0.85em;">' + (gradeData.source || '-') + '</td>';
                 } else {
                     // 미응시인 경우
-                    tableHtml += '<td class="absent-cell">미응시</td>';
-                    tableHtml += '<td class="absent-cell">-</td>';
-                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">미응시</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
                     for (var k = 0; k < 9; k++) { // 9개 과목
-                        tableHtml += '<td class="absent-cell">-</td>';
+                        tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
                     }
-                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
                 }
                 
                 tableHtml += '</tr>';
