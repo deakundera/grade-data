@@ -1166,12 +1166,17 @@
             
             console.log('발견된 모클 시트들:', testSheetNames);
             
-            // ★ 각 시트에서 직접 만점 추출 (F열=화법과작문 최고점 등)
+            // ★ 모든 시트 처리 전에 먼저 만점 정보를 모두 추출
+            console.log('=== 1단계: 모든 시트의 만점 추출 ===');
             extractMaxScoresDirectly(workbook, testSheetNames);
+            console.log('추출 완료된 maxScores:', maxScores);
             
+            console.log('=== 2단계: 학생 데이터 처리 ===');
             for (var s = 0; s < testSheetNames.length; s++) {
                 var sheetName = testSheetNames[s];
                 if (!workbook.Sheets[sheetName]) continue;
+                
+                console.log('처리 중인 시트:', sheetName);
                 
                 var worksheet = workbook.Sheets[sheetName];
                 var jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
@@ -1180,8 +1185,9 @@
                 
                 var headers = jsonData[0];
                 
-                // 직접 추출된 만점 정보 사용
-                console.log('사용할 만점 정보:', maxScores[sheetName] || '없음');
+                // 미리 추출된 만점 정보 사용
+                var sheetMaxScores = maxScores[sheetName] || {};
+                console.log(sheetName + ' 사용할 만점 정보:', sheetMaxScores);
                 
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
@@ -1201,7 +1207,6 @@
                     
                     var details = {};
                     var ratios = {};
-                    var sheetMaxScores = maxScores[sheetName] || {};
                     
                     for (var j = 5; j < Math.min(14, headers.length, row.length); j++) {
                         var subject = headers[j];
@@ -1273,6 +1278,13 @@
             // 기존 maxScores 초기화
             maxScores = {};
             
+            // ★ 화법과 작문 하드코딩 백업 (문제 해결용)
+            var hwaBubHardCoded = {
+                '모클1회': 22, '모클2회': 22, '모클3회': 22, '모클4회': 13, '모클5회': 13,
+                '모클6회': 22, '모클7회': 22, '모클8회': 22, '모클9회': 22, '모클10회': 15,
+                '모클11회': 22, '모클12회': 22
+            };
+            
             for (var i = 0; i < testSheetNames.length; i++) {
                 var sheetName = testSheetNames[i];
                 if (!workbook.Sheets[sheetName]) continue;
@@ -1320,6 +1332,26 @@
                         }
                     } else {
                         console.log('⚠️ 유효한 점수 없음:', sheetName, subject);
+                    }
+                }
+                
+                // ★ 화법과 작문 백업 처리
+                var hwaBubFound = false;
+                for (var subj in maxScores[sheetName]) {
+                    if (subj.includes('화법')) {
+                        hwaBubFound = true;
+                        break;
+                    }
+                }
+                
+                if (!hwaBubFound && hwaBubHardCoded[sheetName]) {
+                    // 화법과 작문을 찾지 못했으면 하드코딩된 값 사용
+                    for (var h = 0; h < headers.length; h++) {
+                        if (headers[h] && headers[h].includes('화법')) {
+                            maxScores[sheetName][headers[h]] = hwaBubHardCoded[sheetName];
+                            console.log('🔧 화법과 작문 하드코딩 적용:', sheetName, headers[h], '=', hwaBubHardCoded[sheetName] + '점');
+                            break;
+                        }
                     }
                 }
                 
