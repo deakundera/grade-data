@@ -1064,8 +1064,8 @@
                 
                 console.log('첫번째 시트에서 만점 정보 추출:', firstSheetName);
                 
-                // 첫 번째 시트에서 VLOOKUP 함수로부터 만점 추출 (매트릭스 구조)
-                extractMaxScoresFromFormulas(firstSheet);
+                // ★ 새로운 방식: 각 시트에서 직접 만점 추출 (F열 최고점 등)
+                // 기존 VLOOKUP 방식 대신 각 시트의 실제 데이터에서 최고점을 찾는 방식 사용
                 
                 var sourceStartRow = -1;
                 var testNameColumn = -1;
@@ -1166,6 +1166,9 @@
             
             console.log('발견된 모클 시트들:', testSheetNames);
             
+            // ★ 각 시트에서 직접 만점 추출 (F열=화법과작문 최고점 등)
+            extractMaxScoresDirectly(workbook, testSheetNames);
+            
             for (var s = 0; s < testSheetNames.length; s++) {
                 var sheetName = testSheetNames[s];
                 if (!workbook.Sheets[sheetName]) continue;
@@ -1177,32 +1180,8 @@
                 
                 var headers = jsonData[0];
                 
-                // 1번 방식(추출된 만점)만 사용하되, 백업으로 실제 데이터 최대값 확인
+                // 직접 추출된 만점 정보 사용
                 console.log('사용할 만점 정보:', maxScores[sheetName] || '없음');
-                
-                // ★ 백업 방법: 만점 정보가 없으면 실제 데이터에서 최대값 추출
-                if (!maxScores[sheetName]) {
-                    console.log('⚠️ ', sheetName, '의 만점 정보가 없어서 실제 데이터에서 추정합니다.');
-                    maxScores[sheetName] = {};
-                    
-                    // 각 과목별로 실제 점수들의 최대값 확인
-                    for (var j = 5; j < Math.min(14, headers.length); j++) {
-                        var subject = headers[j];
-                        if (subject) {
-                            var maxFoundScore = 0;
-                            for (var i = 1; i < jsonData.length; i++) {
-                                var row = jsonData[i];
-                                if (row && row[j] && !isNaN(row[j])) {
-                                    maxFoundScore = Math.max(maxFoundScore, parseInt(row[j]));
-                                }
-                            }
-                            if (maxFoundScore > 0) {
-                                maxScores[sheetName][subject] = maxFoundScore;
-                                console.log('데이터 기반 만점 추정:', sheetName, subject, '=', maxFoundScore + '점');
-                            }
-                        }
-                    }
-                }
                 
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
@@ -1270,102 +1249,64 @@
             console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
         }
 
-        // 첫 번째 시트의 VLOOKUP 함수에서 만점 추출 (수정됨)
-        function extractMaxScoresFromFormulas(worksheet) {
-            var range = XLSX.utils.decode_range(worksheet['!ref']);
-            var firstSheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+        // 각 시트에서 직접 만점 추출 (F열 최고점 방식)
+        function extractMaxScoresDirectly(workbook, testSheetNames) {
+            console.log('각 시트에서 직접 만점 추출 시작...');
             
-            console.log('VLOOKUP 함수에서 만점 추출 시작...');
-            console.log('첫 번째 시트 데이터 구조 확인:', firstSheetData.slice(0, 15));
+            // 기존 maxScores 초기화
+            maxScores = {};
             
-            // 헤더에서 과목명 찾기 (예: G열=화법과 작문, H열=문법)
-            var subjectHeaders = {};
-            var testRows = {};
-            
-            // 헤더 행에서 과목명 추출 (보통 6행 또는 7행)
-            for (var headerRow = 5; headerRow < Math.min(8, firstSheetData.length); headerRow++) {
-                var row = firstSheetData[headerRow];
-                if (row) {
-                    for (var col = 6; col < Math.min(20, row.length); col++) { // G열(6)부터 시작
-                        var cellValue = row[col];
-                        if (cellValue && (cellValue.toString().includes('화법') || cellValue.toString().includes('문법') || 
-                                         cellValue.toString().includes('독서') || cellValue.toString().includes('문학'))) {
-                            subjectHeaders[col] = cellValue.toString();
-                            console.log('과목 헤더 발견:', String.fromCharCode(65 + col) + (headerRow + 1), '=', cellValue);
-                        }
-                    }
-                }
-            }
-            
-            // 왼쪽 열에서 시험명 찾기 (모클1회, 모클2회 등)
-            for (var row = 6; row < Math.min(20, firstSheetData.length); row++) {
-                var rowData = firstSheetData[row];
-                if (rowData) {
-                    for (var col = 0; col < 6; col++) {
-                        var cellValue = rowData[col];
-                        if (cellValue && cellValue.toString().includes('모클') && cellValue.toString().includes('회')) {
-                            testRows[row] = cellValue.toString();
-                            console.log('시험명 발견:', String.fromCharCode(65 + col) + (row + 1), '=', cellValue);
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            console.log('발견된 과목 헤더:', subjectHeaders);
-            console.log('발견된 시험 행:', testRows);
-            
-            // 각 셀에서 VLOOKUP 함수 찾기
-            for (var R = range.s.r; R <= range.e.r; ++R) {
-                for (var C = range.s.c; C <= range.e.c; ++C) {
-                    var cellAddress = XLSX.utils.encode_cell({r: R, c: C});
-                    var cell = worksheet[cellAddress];
+            for (var i = 0; i < testSheetNames.length; i++) {
+                var sheetName = testSheetNames[i];
+                if (!workbook.Sheets[sheetName]) continue;
+                
+                var worksheet = workbook.Sheets[sheetName];
+                var sheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                
+                if (sheetData.length <= 1) continue;
+                
+                var headers = sheetData[0];
+                console.log(sheetName + ' 헤더:', headers);
+                
+                // 각 시트의 maxScores 초기화
+                maxScores[sheetName] = {};
+                
+                // 각 과목별로 실제 데이터에서 최고점 찾기
+                for (var colIndex = 5; colIndex < Math.min(14, headers.length); colIndex++) {
+                    var subject = headers[colIndex];
+                    if (!subject) continue;
                     
-                    if (cell && cell.f) { // 셀에 수식이 있는 경우
-                        var formula = cell.f;
-                        
-                        // VLOOKUP 함수 패턴 찾기: =VLOOKUP(...)/숫자
-                        var vlookupPattern = /=VLOOKUP\([^,]+,([^!]+)![^,]+,(\d+),[^)]+\)\/(\d+)/g;
-                        var match = vlookupPattern.exec(formula);
-                        
-                        if (match) {
-                            var referenceSheetName = match[1];
-                            var columnIndex = parseInt(match[2]);
-                            var maxScore = parseInt(match[3]);
-                            
-                            console.log('VLOOKUP 발견 위치:', cellAddress, '수식:', formula);
-                            console.log('참조시트:', referenceSheetName, '열:', columnIndex, '만점:', maxScore);
-                            
-                            // 현재 셀의 행과 열에서 시험명과 과목명 찾기
-                            var currentTestName = testRows[R]; // 행에서 시험명 찾기
-                            var subjectName = subjectHeaders[C]; // 열에서 과목명 찾기
-                            
-                            // ★ 핵심 수정: VLOOKUP 참조 오류 보정
-                            // VLOOKUP이 이전 시트를 참조하고 있으므로, 현재 행의 시험명을 사용
-                            var testName = currentTestName || referenceSheetName;
-                            
-                            if (testName && subjectName) {
-                                // maxScores 객체에 저장
-                                if (!maxScores[testName]) {
-                                    maxScores[testName] = {};
-                                }
-                                maxScores[testName][subjectName] = maxScore;
-                                
-                                console.log('과목별 만점 설정 (보정됨):', testName, '+', subjectName, '=', maxScore + '점');
-                                
-                                // 참조 오류 감지 알림
-                                if (referenceSheetName !== testName) {
-                                    console.log('⚠️ VLOOKUP 참조 오류 감지:', testName, '이 ', referenceSheetName, '을 참조하고 있음');
-                                }
-                            } else {
-                                console.log('매핑 실패 - 시험명:', testName, '과목명:', subjectName);
+                    var maxScore = 0;
+                    var validScores = [];
+                    
+                    // 모든 학생 데이터에서 해당 과목의 최고점 찾기
+                    for (var rowIndex = 1; rowIndex < sheetData.length; rowIndex++) {
+                        var row = sheetData[rowIndex];
+                        if (row && row[colIndex] !== null && row[colIndex] !== undefined && row[colIndex] !== '') {
+                            var score = parseInt(row[colIndex]);
+                            if (!isNaN(score) && score > 0) {
+                                validScores.push(score);
+                                maxScore = Math.max(maxScore, score);
                             }
                         }
                     }
+                    
+                    if (maxScore > 0) {
+                        maxScores[sheetName][subject] = maxScore;
+                        console.log('직접 추출된 만점:', sheetName, subject, '=', maxScore + '점', '(유효 점수:', validScores.length + '개)');
+                        
+                        // 화법과 작문인 경우 특별히 로그 출력
+                        if (subject.includes('화법')) {
+                            console.log('🎯 화법과 작문 만점 확정:', sheetName, '=', maxScore + '점');
+                            console.log('   유효한 점수들:', validScores.sort((a, b) => b - a).slice(0, 5), '...');
+                        }
+                    }
                 }
+                
+                console.log(sheetName + ' 추출 완료:', maxScores[sheetName]);
             }
             
-            console.log('추출된 maxScores (보정 완료):', maxScores);
+            console.log('모든 시트 만점 추출 완료:', maxScores);
         }
         
         function showProgress(show) {
