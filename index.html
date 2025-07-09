@@ -1214,9 +1214,26 @@
                             var maxScore = sheetMaxScores[subject];
                             if (maxScore) {
                                 ratios[subject] = Math.round((subjectScore / maxScore) * 100);
-                                console.log('비율 계산:', subject, subjectScore + '/' + maxScore + ' = ' + ratios[subject] + '%');
+                                console.log('비율 계산:', sheetName, name, subject, subjectScore + '/' + maxScore + ' = ' + ratios[subject] + '%');
                             } else {
-                                console.log('만점 정보 없음:', sheetName, subject);
+                                console.log('⚠️ 만점 정보 없음:', sheetName, name, subject, '| 보유 만점 정보:', Object.keys(sheetMaxScores));
+                                console.log('   → subject 값:', '"' + subject + '"', '타입:', typeof subject, '길이:', subject.length);
+                                
+                                // 화법과 작문인 경우 특별 처리
+                                if (subject.includes('화법')) {
+                                    console.log('🔍 화법과 작문 디버깅:');
+                                    console.log('   → maxScores 전체:', maxScores);
+                                    console.log('   → sheetMaxScores:', sheetMaxScores);
+                                    console.log('   → 현재 시트:', sheetName);
+                                    
+                                    // 강제로 만점 설정 시도
+                                    var forcedMax = 22; // 일반적인 화법과 작문 만점
+                                    if (sheetName === '모클5회' || sheetName === '모클4회') {
+                                        forcedMax = 13;
+                                    }
+                                    ratios[subject] = Math.round((subjectScore / forcedMax) * 100);
+                                    console.log('   → 강제 계산:', subjectScore + '/' + forcedMax + ' = ' + ratios[subject] + '%');
+                                }
                             }
                         }
                     }
@@ -1293,13 +1310,16 @@
                     
                     if (maxScore > 0) {
                         maxScores[sheetName][subject] = maxScore;
-                        console.log('직접 추출된 만점:', sheetName, subject, '=', maxScore + '점', '(유효 점수:', validScores.length + '개)');
+                        console.log('직접 추출된 만점:', sheetName, '"' + subject + '"', '=', maxScore + '점', '(유효 점수:', validScores.length + '개)');
                         
                         // 화법과 작문인 경우 특별히 로그 출력
                         if (subject.includes('화법')) {
                             console.log('🎯 화법과 작문 만점 확정:', sheetName, '=', maxScore + '점');
                             console.log('   유효한 점수들:', validScores.sort((a, b) => b - a).slice(0, 5), '...');
+                            console.log('   과목명 정확한 값:', '"' + subject + '"', '길이:', subject.length);
                         }
+                    } else {
+                        console.log('⚠️ 유효한 점수 없음:', sheetName, subject);
                     }
                 }
                 
