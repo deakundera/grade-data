@@ -617,6 +617,7 @@
                     <p>• 엑셀 파일을 업로드하여 성적 데이터를 GitHub에 저장합니다</p>
                     <p>• 업로드된 데이터는 모든 기기에서 접근 가능합니다</p>
                     <p>• 지원 파일 형식: .xlsx, .xls</p>
+                    <p>• <strong>새로운 방식:</strong> VLOOKUP 함수에서 만점을 자동으로 추출합니다</p>
                 </div>
                 
                 <div class="upload-area" id="uploadArea">
@@ -648,11 +649,7 @@
         var dataUrl = '';
         var isAdminAuthenticated = false;
         
-        var maxScores = {
-            "모클1회": {"화법과 작문": 22, "문법": 11, "독서(인문)": 9, "독서(사회)": 11, "독서(과학)": 13, "문학(현대시)": 7, "문학(현대소설)": 7, "문학(고전시가)": 11, "문학(고전소설)": 9},
-            "모클2회": {"화법과 작문": 22, "문법": 12, "독서(인문)": 12, "독서(사회)": 11, "독서(기술)": 9, "문학(현대시)": 7, "문학(현대소설)": 9, "문학(고전시가)": 7, "문학(고전소설)": 11},
-            "모클3회": {"화법과 작문": 13, "문법": 11, "독서(인문)": 20, "독서(사회)": 9, "독서(기술)": 9, "문학(현대시)": 7, "문학(현대소설)": 9, "문학(고전시가)": 13, "문학(고전소설)": 9}
-        };
+        var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
 
         // 관리자 인증 확인
         function checkAdminPassword() {
@@ -1065,7 +1062,10 @@
                 var firstSheet = workbook.Sheets[firstSheetName];
                 var firstSheetData = XLSX.utils.sheet_to_json(firstSheet, {header: 1});
                 
-                console.log('첫번째 시트에서 출처 정보 수집:', firstSheetName);
+                console.log('첫번째 시트에서 만점 정보 추출:', firstSheetName);
+                
+                // 첫 번째 시트에서 VLOOKUP 함수로부터 만점 추출 (매트릭스 구조)
+                extractMaxScoresFromFormulas(firstSheet);
                 
                 var sourceStartRow = -1;
                 var testNameColumn = -1;
@@ -1120,6 +1120,8 @@
             }
             
             var mappingSheetName = workbook.SheetNames[1];
+            // 현재 워크북을 전역 변수에 저장 (더 이상 findSubjectFromColumn 함수를 사용하지 않음)
+            window.currentWorkbook = workbook;
             if (workbook.Sheets[mappingSheetName]) {
                 var mappingSheet = workbook.Sheets[mappingSheetName];
                 var mappingData = XLSX.utils.sheet_to_json(mappingSheet, {header: 1});
@@ -1175,30 +1177,8 @@
                 
                 var headers = jsonData[0];
                 
-                if (!maxScores[sheetName]) {
-                    maxScores[sheetName] = {};
-                    console.log('최대점수 자동 계산 중:', sheetName);
-                    
-                    for (var j = 5; j < Math.min(14, headers.length); j++) {
-                        var subject = headers[j];
-                        if (subject) {
-                            var maxScore = 0;
-                            for (var i = 1; i < jsonData.length; i++) {
-                                var row = jsonData[i];
-                                if (row && row[j] !== null && row[j] !== undefined && row[j] !== '') {
-                                    var score = parseInt(row[j]);
-                                    if (!isNaN(score) && score > maxScore) {
-                                        maxScore = score;
-                                    }
-                                }
-                            }
-                            if (maxScore > 0) {
-                                maxScores[sheetName][subject] = maxScore;
-                                console.log('최대점수 설정:', subject, '=', maxScore);
-                            }
-                        }
-                    }
-                }
+                // 2번 방식(자동 계산) 제거 - 1번 방식(추출된 만점)만 사용
+                console.log('사용할 만점 정보:', maxScores[sheetName] || '없음');
                 
                 for (var i = 1; i < jsonData.length; i++) {
                     var row = jsonData[i];
@@ -1227,9 +1207,13 @@
                         if (subject && subjectScore !== null && subjectScore !== undefined && subjectScore !== '') {
                             details[subject] = subjectScore;
                             
+                            // 1번 방식으로 추출된 만점만 사용
                             var maxScore = sheetMaxScores[subject];
                             if (maxScore) {
                                 ratios[subject] = Math.round((subjectScore / maxScore) * 100);
+                                console.log('비율 계산:', subject, subjectScore + '/' + maxScore + ' = ' + ratios[subject] + '%');
+                            } else {
+                                console.log('만점 정보 없음:', sheetName, subject);
                             }
                         }
                     }
@@ -1261,6 +1245,98 @@
             
             console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
         }
+
+        // 첫 번째 시트의 VLOOKUP 함수에서 만점 추출
+        function extractMaxScoresFromFormulas(worksheet) {
+            var range = XLSX.utils.decode_range(worksheet['!ref']);
+            var firstSheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+            
+            console.log('VLOOKUP 함수에서 만점 추출 시작...');
+            console.log('첫 번째 시트 데이터 구조 확인:', firstSheetData.slice(0, 15));
+            
+            // 헤더에서 과목명 찾기 (예: G열=화법과 작문, H열=문법)
+            var subjectHeaders = {};
+            var testRows = {};
+            
+            // 헤더 행에서 과목명 추출 (보통 6행 또는 7행)
+            for (var headerRow = 5; headerRow < Math.min(8, firstSheetData.length); headerRow++) {
+                var row = firstSheetData[headerRow];
+                if (row) {
+                    for (var col = 6; col < Math.min(20, row.length); col++) { // G열(6)부터 시작
+                        var cellValue = row[col];
+                        if (cellValue && (cellValue.toString().includes('화법') || cellValue.toString().includes('문법') || 
+                                         cellValue.toString().includes('독서') || cellValue.toString().includes('문학'))) {
+                            subjectHeaders[col] = cellValue.toString();
+                            console.log('과목 헤더 발견:', String.fromCharCode(65 + col) + (headerRow + 1), '=', cellValue);
+                        }
+                    }
+                }
+            }
+            
+            // 왼쪽 열에서 시험명 찾기 (모클1회, 모클2회 등)
+            for (var row = 6; row < Math.min(20, firstSheetData.length); row++) {
+                var rowData = firstSheetData[row];
+                if (rowData) {
+                    for (var col = 0; col < 6; col++) {
+                        var cellValue = rowData[col];
+                        if (cellValue && cellValue.toString().includes('모클') && cellValue.toString().includes('회')) {
+                            testRows[row] = cellValue.toString();
+                            console.log('시험명 발견:', String.fromCharCode(65 + col) + (row + 1), '=', cellValue);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            console.log('발견된 과목 헤더:', subjectHeaders);
+            console.log('발견된 시험 행:', testRows);
+            
+            // 각 셀에서 VLOOKUP 함수 찾기
+            for (var R = range.s.r; R <= range.e.r; ++R) {
+                for (var C = range.s.c; C <= range.e.c; ++C) {
+                    var cellAddress = XLSX.utils.encode_cell({r: R, c: C});
+                    var cell = worksheet[cellAddress];
+                    
+                    if (cell && cell.f) { // 셀에 수식이 있는 경우
+                        var formula = cell.f;
+                        
+                        // VLOOKUP 함수 패턴 찾기: =VLOOKUP(...)/숫자
+                        var vlookupPattern = /=VLOOKUP\([^,]+,([^!]+)![^,]+,(\d+),[^)]+\)\/(\d+)/g;
+                        var match = vlookupPattern.exec(formula);
+                        
+                        if (match) {
+                            var sheetName = match[1];
+                            var columnIndex = parseInt(match[2]);
+                            var maxScore = parseInt(match[3]);
+                            
+                            console.log('VLOOKUP 발견 위치:', cellAddress, '수식:', formula);
+                            console.log('시트:', sheetName, '열:', columnIndex, '만점:', maxScore);
+                            
+                            // 현재 셀의 행과 열에서 시험명과 과목명 찾기
+                            var testName = testRows[R] || sheetName; // 행에서 시험명 찾기
+                            var subjectName = subjectHeaders[C]; // 열에서 과목명 찾기
+                            
+                            if (testName && subjectName) {
+                                // maxScores 객체에 저장
+                                if (!maxScores[testName]) {
+                                    maxScores[testName] = {};
+                                }
+                                maxScores[testName][subjectName] = maxScore;
+                                
+                                console.log('과목별 만점 설정:', testName, '+', subjectName, '=', maxScore + '점');
+                            } else {
+                                console.log('매핑 실패 - 시험명:', testName, '과목명:', subjectName);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            console.log('추출된 maxScores:', maxScores);
+        }
+        
+        // 더 이상 사용하지 않는 함수 (매트릭스 구조로 변경됨)
+        // function findSubjectFromColumn(sheetName, columnIndex, maxScore) { ... }
 
         function showProgress(show) {
             document.getElementById('progressContainer').style.display = show ? 'block' : 'none';
