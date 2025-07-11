@@ -686,8 +686,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🤖 모클 성적 조회 시스템</h1>
-            <p>정동민국어논술학원 • 고2 모의고사 성적 조회 • AI 분석 포함</p>
+            <h1>📊 모클 성적 조회 시스템</h1>
+            <p>정동민국어논술학원 • 고2 모의고사 성적 조회 • 분석 포함</p>
         </div>
         
         <div class="tab-container">
@@ -701,7 +701,7 @@
                 <h3>📋 성적 조회 방법</h3>
                 <p>• <strong>출결번호로 검색:</strong> 본인의 4자리 출결번호를 입력하세요</p>
                 <p>• 예시: 3188, 1234, 2274 등</p>
-                <p>• <strong>🤖 AI 분석:</strong> 성적 조회 시 자동으로 개인별 맞춤 분석을 제공합니다</p>
+                <p>• <strong>🧠 분석:</strong> 성적 조회 시 자동으로 개인별 맞춤 분석을 제공합니다</p>
                 <div id="urlInfo" style="margin-top: 15px; padding: 10px; background: #e8f5e9; border-radius: 8px; border-left: 4px solid #4caf50; display: none;">
                     <strong>💡 더 쉬운 접속 방법:</strong><br>
                     다음 URL을 북마크하면 어떤 기기에서든 바로 사용할 수 있습니다:<br>
@@ -724,19 +724,19 @@
             <div id="results" style="display: none;">
                 <div id="studentInfo"></div>
                 
-                <!-- AI 분석 섹션 -->
+                <!-- 분석 섹션 -->
                 <div id="aiAnalysis" class="ai-analysis" style="display: none;">
                     <div class="ai-analysis-header">
-                        <div class="ai-icon">🤖</div>
+                        <div class="ai-icon">🧠</div>
                         <div>
-                            <h3>AI 학습 분석 보고서</h3>
+                            <h3>학습 분석 보고서</h3>
                             <p style="opacity: 0.9; margin: 0;">개인별 맞춤 성적 분석 및 학습 전략 제안</p>
                         </div>
                     </div>
                     
                     <div id="aiContent" class="ai-content">
                         <div class="ai-loading">
-                            <span>🧠 AI가 성적을 분석하고 있습니다</span>
+                            <span>🧠 성적을 분석하고 있습니다</span>
                             <div class="loading-dots">
                                 <div class="loading-dot"></div>
                                 <div class="loading-dot"></div>
@@ -835,11 +835,11 @@
         
         var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
 
-        // AI 분석 함수
+        // 분석 함수
         function generateAIAnalysis(student) {
-            console.log('AI 분석 시작:', student.name);
+            console.log('분석 시작:', student.name);
             
-            // AI 분석 섹션 표시
+            // 분석 섹션 표시
             var aiAnalysisDiv = document.getElementById('aiAnalysis');
             var aiContentDiv = document.getElementById('aiContent');
             
@@ -848,7 +848,7 @@
             // 로딩 상태 표시
             aiContentDiv.innerHTML = `
                 <div class="ai-loading">
-                    <span>🧠 AI가 성적을 분석하고 있습니다</span>
+                    <span>🧠 성적을 분석하고 있습니다</span>
                     <div class="loading-dots">
                         <div class="loading-dot"></div>
                         <div class="loading-dot"></div>
@@ -883,11 +883,19 @@
             var scoreValues = [];
             var subjectScores = {};
             var subjectRatios = {};
+            var testDetails = {}; // 시험별 상세 정보 저장
             
             gradeKeys.forEach(function(testName) {
                 var gradeData = grades[testName];
                 if (gradeData.grade) gradeValues.push(parseInt(gradeData.grade));
                 if (gradeData.score) scoreValues.push(parseInt(gradeData.score));
+                
+                // 시험별 상세 정보 저장 (최고 성적 찾기용)
+                testDetails[testName] = {
+                    grade: parseInt(gradeData.grade),
+                    score: parseInt(gradeData.score),
+                    source: gradeData.source || ''
+                };
                 
                 // 과목별 점수 및 비율 수집
                 if (gradeData.details) {
@@ -910,6 +918,17 @@
             var bestScore = scoreValues.length > 0 ? Math.max(...scoreValues) : 0;
             var latestGrade = gradeValues.length > 0 ? gradeValues[gradeValues.length - 1] : 0;
             
+            // 최고 성적 시험 찾기
+            var bestTest = '';
+            var bestTestSource = '';
+            Object.keys(testDetails).forEach(function(testName) {
+                var testInfo = testDetails[testName];
+                if (testInfo.score === bestScore) {
+                    bestTest = testName;
+                    bestTestSource = testInfo.source;
+                }
+            });
+            
             // 과목별 평균 계산
             var subjectAverages = {};
             Object.keys(subjectRatios).forEach(function(subject) {
@@ -931,38 +950,59 @@
             });
             strengths.sort((a, b) => b.average - a.average);
             
-            // 약점 과목 찾기 (평균 50% 미만)
+            // 약점 과목 찾기 (최근 4회 데이터에서 평균 50% 미만)
             var weaknesses = [];
-            Object.keys(subjectAverages).forEach(function(subject) {
-                if (subjectAverages[subject] < 50) {
-                    weaknesses.push({
-                        subject: subject,
-                        average: subjectAverages[subject]
-                    });
+            Object.keys(subjectRatios).forEach(function(subject) {
+                var ratios = subjectRatios[subject];
+                if (ratios.length > 0) {
+                    // 최근 4회 데이터만 사용
+                    var recentRatios = ratios.slice(-4);
+                    var recentAvg = recentRatios.reduce((a, b) => a + b) / recentRatios.length;
+                    
+                    if (recentAvg < 50) {
+                        weaknesses.push({
+                            subject: subject,
+                            average: Math.round(recentAvg * 10) / 10,
+                            recentData: recentRatios.length + '회 평균'
+                        });
+                    }
                 }
             });
             weaknesses.sort((a, b) => a.average - b.average);
             
-            // 추세 분석
+            // 성적 추이 분석 (선형회귀)
             var trends = [];
             Object.keys(subjectRatios).forEach(function(subject) {
                 var ratios = subjectRatios[subject];
-                if (ratios.length >= 2) {
-                    var recent = ratios.slice(-3);
-                    var older = ratios.slice(0, -3);
+                if (ratios.length >= 3) {
+                    // 선형회귀 계산
+                    var n = ratios.length;
+                    var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
                     
-                    if (older.length > 0) {
-                        var recentAvg = recent.reduce((a, b) => a + b) / recent.length;
-                        var olderAvg = older.reduce((a, b) => a + b) / older.length;
-                        var change = recentAvg - olderAvg;
-                        
-                        if (Math.abs(change) > 5) {
-                            trends.push({
-                                subject: subject,
-                                change: change,
-                                type: change > 0 ? 'up' : 'down'
-                            });
-                        }
+                    for (var i = 0; i < n; i++) {
+                        sumX += i;
+                        sumY += ratios[i];
+                        sumXY += i * ratios[i];
+                        sumXX += i * i;
+                    }
+                    
+                    var slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+                    var intercept = (sumY - slope * sumX) / n;
+                    
+                    // 기울기를 백분율로 변환 (시험당 변화율)
+                    var trendPerTest = Math.round(slope * 10) / 10;
+                    
+                    // 전체 기간 동안의 총 변화량
+                    var totalChange = Math.round(slope * (n - 1) * 10) / 10;
+                    
+                    if (Math.abs(totalChange) > 5) { // 총 5% 이상 변화 시만 추세로 인정
+                        trends.push({
+                            subject: subject,
+                            slope: trendPerTest,
+                            totalChange: totalChange,
+                            type: totalChange > 0 ? 'up' : 'down',
+                            confidence: Math.min(Math.abs(totalChange) / 10, 1) // 신뢰도 (0-1)
+                        });
                     }
                 }
             });
@@ -974,7 +1014,7 @@
                 recommendations.push({
                     priority: "높음",
                     action: weaknesses[0].subject + " 집중 학습",
-                    reason: "평균 " + weaknesses[0].average + "%로 가장 낮은 성취도"
+                    reason: "최근 4회 평균 " + weaknesses[0].average + "%로 가장 낮은 성취도"
                 });
             }
             
@@ -987,11 +1027,11 @@
             }
             
             if (trends.filter(t => t.type === 'up').length > 0) {
-                var upTrend = trends.filter(t => t.type === 'up')[0];
+                var upTrend = trends.filter(t => t.type === 'up').sort((a, b) => b.totalChange - a.totalChange)[0];
                 recommendations.push({
                     priority: "낮음",
                     action: upTrend.subject + " 상승세 유지",
-                    reason: "최근 성취도가 향상되고 있는 과목"
+                    reason: "전체 기간 동안 " + upTrend.totalChange + "% 향상 추세"
                 });
             }
             
@@ -1004,10 +1044,13 @@
                     name: student.name,
                     attendanceNumber: student.attendanceNumber,
                     testCount: gradeKeys.length,
+                    totalTests: window.discoveredTestSheets ? window.discoveredTestSheets.length : 12,
                     avgGrade: avgGrade,
                     avgScore: avgScore,
                     bestGrade: bestGrade,
                     bestScore: bestScore,
+                    bestTest: bestTest,
+                    bestTestSource: bestTestSource,
                     latestGrade: latestGrade,
                     gradeTarget: gradeTarget,
                     scoreNeeded: scoreNeeded
@@ -1027,8 +1070,8 @@
                 <div class="analysis-grid">
                     <div class="analysis-card">
                         <h4>📊 현재 성적 현황</h4>
-                        <p><strong>응시 현황:</strong> ${summary.testCount}회 모의고사</p>
-                        <p><strong>최고 성적:</strong> ${summary.bestGrade}등급 ${summary.bestScore}점</p>
+                        <p><strong>응시 현황:</strong> ${summary.testCount}/${summary.totalTests}회 모의고사</p>
+                        <p><strong>최고 성적:</strong> ${summary.bestGrade}등급 ${summary.bestScore}점 (${summary.bestTest}${summary.bestTestSource ? ' ' + summary.bestTestSource : ''})</p>
                         <p><strong>평균 등급:</strong> ${summary.avgGrade}등급</p>
                         <p><strong>평균 점수:</strong> ${summary.avgScore}점</p>
                         <p><strong>현재 등급:</strong> <span class="grade-${summary.latestGrade}">${summary.latestGrade}등급</span></p>
@@ -1055,13 +1098,13 @@
                 
                 <div class="analysis-grid">
                     <div class="analysis-card">
-                        <h4>⚠️ 개선 필요 과목</h4>
+                        <h4>⚠️ 개선 필요 과목 (최근 4회)</h4>
                         ${analysis.weaknesses.length > 0 ? 
                             analysis.weaknesses.map((w, i) => `
                                 <div style="margin: 8px 0;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <span>${i + 1}. ${w.subject}</span>
-                                        <span style="font-weight: bold; color: #f87171;">${w.average}%</span>
+                                        <span style="font-weight: bold; color: #f87171;">${w.average}% (${w.recentData})</span>
                                     </div>
                                     <div class="progress-bar-container">
                                         <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
@@ -1073,15 +1116,20 @@
                     </div>
                     
                     <div class="analysis-card">
-                        <h4>📈 성적 추이 분석</h4>
+                        <h4>📈 성적 추이 분석 (선형회귀)</h4>
                         ${analysis.trends.length > 0 ? 
                             analysis.trends.map(t => `
                                 <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
-                                    <span class="trend-${t.type}">${t.type === 'up' ? '↗️' : '↘️'}</span>
-                                    <span>${t.subject}</span>
-                                    <span style="font-weight: bold; color: ${t.type === 'up' ? '#10b981' : '#f87171'};">
-                                        ${t.change > 0 ? '+' : ''}${Math.round(t.change)}%
-                                    </span>
+                                    <span class="trend-${t.type}">${t.type === 'up' ? '📈' : '📉'}</span>
+                                    <span style="flex: 1;">${t.subject}</span>
+                                    <div style="display: flex; flex-direction: column; align-items: end;">
+                                        <span style="font-weight: bold; color: ${t.type === 'up' ? '#10b981' : '#f87171'};">
+                                            ${t.totalChange > 0 ? '+' : ''}${t.totalChange}%
+                                        </span>
+                                        <span style="font-size: 0.8em; opacity: 0.8;">
+                                            시험당 ${t.slope > 0 ? '+' : ''}${t.slope}%
+                                        </span>
+                                    </div>
                                 </div>
                             `).join('') : 
                             '<p style="color: rgba(255,255,255,0.8);">추이 분석을 위해 더 많은 시험 데이터가 필요합니다.</p>'
