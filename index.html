@@ -26,6 +26,57 @@
         .tab.active { color: #667eea; border-bottom-color: #667eea; font-weight: bold; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
+        .admin-check {
+            background: #fff3cd; border-radius: 15px; padding: 25px; margin-bottom: 25px;
+            border-left: 4px solid #ffc107;
+        }
+        .admin-check h3 { color: #856404; margin-bottom: 15px; font-size: 1.3em; }
+        .admin-check p { color: #856404; line-height: 1.6; margin-bottom: 15px; }
+        .admin-password {
+            width: 100%; padding: 12px; border: 2px solid #ffc107; border-radius: 8px;
+            font-size: 1em; margin: 10px 0;
+        }
+        .admin-btn {
+            background: #ffc107; color: #856404; border: none; padding: 12px 24px;
+            border-radius: 8px; cursor: pointer; font-size: 1em; font-weight: bold; margin: 5px;
+        }
+        .admin-btn:hover { background: #e0a800; }
+        .setup-section {
+            background: #e8f2ff; border-radius: 15px; padding: 25px; margin-bottom: 25px;
+            border-left: 4px solid #667eea; display: none;
+        }
+        .setup-section h3 { color: #333; margin-bottom: 15px; font-size: 1.3em; }
+        .setup-section p { color: #666; line-height: 1.6; margin-bottom: 10px; }
+        .setup-input {
+            width: 100%; padding: 12px; border: 2px solid #667eea; border-radius: 8px;
+            font-size: 1em; margin: 10px 0;
+        }
+        .setup-btn {
+            background: #667eea; color: white; border: none; padding: 12px 24px;
+            border-radius: 8px; cursor: pointer; font-size: 1em; font-weight: bold; margin: 5px;
+        }
+        .upload-area {
+            border: 3px dashed #ccc; border-radius: 15px; padding: 40px; text-align: center;
+            margin: 20px 0; background: #f9f9fa; transition: all 0.3s;
+        }
+        .upload-area.dragover { border-color: #667eea; background: #e8f2ff; }
+        .upload-btn {
+            background: linear-gradient(45deg, #667eea, #764ba2); color: white; border: none;
+            padding: 12px 30px; border-radius: 25px; cursor: pointer; font-size: 1em; margin: 5px;
+        }
+        .upload-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .status {
+            margin: 20px 0; padding: 15px; border-radius: 8px; display: none;
+        }
+        .status.success {
+            background: #d4edda; color: #155724; border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd; color: #856404; border: 1px solid #ffeaa7;
+        }
         .instructions {
             background: #e8f2ff; border-radius: 15px; padding: 25px; margin-bottom: 25px;
             border-left: 4px solid #667eea;
@@ -134,6 +185,7 @@
         
         <div class="tab-container">
             <button class="tab active" onclick="switchTab('student')">🔍 성적 조회</button>
+            <button class="tab" onclick="switchTab('admin')">⚙️ 관리자</button>
         </div>
         
         <div id="studentTab" class="tab-content active">
@@ -164,6 +216,66 @@
                 <h3>🔍 검색 결과가 없습니다</h3>
                 <p>입력하신 출결번호를 다시 확인해주세요.</p>
             </div>
+        </div>
+        
+        <!-- 관리자 탭 -->
+        <div id="adminTab" class="tab-content">
+            <!-- 관리자 인증 섹션 -->
+            <div id="adminAuthSection" class="admin-check">
+                <h3>🔐 관리자 인증</h3>
+                <p>관리자 기능을 사용하려면 비밀번호를 입력해주세요.</p>
+                <input type="password" id="adminPassword" class="admin-password" placeholder="관리자 비밀번호를 입력하세요" onkeypress="if(event.key==='Enter') checkAdminPassword()">
+                <br>
+                <button onclick="checkAdminPassword()" class="admin-btn">🔑 인증</button>
+                <button onclick="resetAdminAccess()" class="admin-btn" style="background: #dc3545; color: white;">🔄 초기화</button>
+                
+                <p style="margin-top: 15px; font-size: 0.9em;">
+                    <strong>📌 관리자 비밀번호:</strong> teacher123
+                </p>
+            </div>
+            
+            <!-- GitHub 저장소 설정 섹션 -->
+            <div id="githubSetup" class="setup-section">
+                <h3>🔧 GitHub 저장소 설정</h3>
+                <p><strong>처음 사용 시 한 번만 설정하면 됩니다!</strong></p>
+                <p>1. GitHub에서 새 저장소를 만드세요 (예: grade-data)</p>
+                <p>2. 저장소를 Public으로 설정하고 GitHub Pages를 활성화하세요</p>
+                <p>3. 아래에 저장소 정보를 입력하세요:</p>
+                
+                <input type="text" id="githubUsername" class="setup-input" placeholder="GitHub 사용자명 (예: myusername)" autocomplete="off">
+                <input type="text" id="githubRepo" class="setup-input" placeholder="저장소 이름 (예: grade-data)" autocomplete="off">
+                <input type="password" id="githubToken" class="setup-input" placeholder="GitHub Personal Access Token (선택사항)">
+                
+                <button onclick="saveGitHubConfig()" class="setup-btn">설정 저장</button>
+                <button onclick="testGitHubConnection()" class="setup-btn">연결 테스트</button>
+                
+                <p style="margin-top: 15px; font-size: 0.9em;">
+                    <strong>📌 GitHub Token 발급 방법:</strong><br>
+                    GitHub → Settings → Developer settings → Personal access tokens → Generate new token<br>
+                    권한: repo (전체 저장소 접근 권한) 선택
+                </p>
+            </div>
+            
+            <!-- 파일 업로드 섹션 -->
+            <div id="uploadSection" style="display: none;">
+                <div class="instructions">
+                    <h3>⚙️ 관리자 영역</h3>
+                    <p>• 엑셀 파일을 업로드하여 성적 데이터를 GitHub에 저장합니다</p>
+                    <p>• 업로드된 데이터는 모든 기기에서 접근 가능합니다</p>
+                    <p>• 지원 파일 형식: .xlsx, .xls</p>
+                    <p>• <strong>데모 버전:</strong> 샘플 데이터가 미리 로드되어 있습니다</p>
+                </div>
+                
+                <div class="upload-area" id="uploadArea">
+                    <h3>📁 엑셀 파일 업로드</h3>
+                    <p>파일을 드래그앤드롭하거나 아래 버튼을 클릭하세요</p>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">파일 선택</button>
+                    <button class="upload-btn" onclick="processFileAndUpload()" id="processBtn" disabled>GitHub에 업로드</button>
+                </div>
+            </div>
+            
+            <div class="status" id="statusMessage"></div>
         </div>
     </div>
 
@@ -236,9 +348,130 @@
 
         var discoveredTestSheets = ["모클1회", "모클2회", "모클3회", "모클4회", "모클5회", "모클6회", "모클7회", "모클8회"];
         var isDataLoaded = true;
+        var isAdminAuthenticated = false;
 
         function switchTab(tabName) {
-            // 탭 전환 로직 (필요시 확장)
+            var tabs = document.querySelectorAll('.tab');
+            var contents = document.querySelectorAll('.tab-content');
+            
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
+            for (var i = 0; i < contents.length; i++) {
+                contents[i].classList.remove('active');
+            }
+            
+            if (tabName === 'student') {
+                document.querySelector('.tab').classList.add('active');
+                document.getElementById('studentTab').classList.add('active');
+            } else if (tabName === 'admin') {
+                document.querySelectorAll('.tab')[1].classList.add('active');
+                document.getElementById('adminTab').classList.add('active');
+                checkAdminAuthStatus();
+            }
+        }
+
+        function checkAdminPassword() {
+            var password = document.getElementById('adminPassword').value.trim();
+            
+            if (password === 'teacher123') {
+                isAdminAuthenticated = true;
+                localStorage.setItem('adminAuth', 'true');
+                
+                document.getElementById('adminAuthSection').style.display = 'none';
+                document.getElementById('githubSetup').style.display = 'block';
+                
+                showStatus('✅ 관리자 인증이 완료되었습니다!', 'success');
+            } else {
+                showStatus('❌ 비밀번호가 올바르지 않습니다.', 'error');
+                document.getElementById('adminPassword').value = '';
+            }
+        }
+        
+        function resetAdminAccess() {
+            isAdminAuthenticated = false;
+            localStorage.removeItem('adminAuth');
+            
+            document.getElementById('adminAuthSection').style.display = 'block';
+            document.getElementById('githubSetup').style.display = 'none';
+            document.getElementById('uploadSection').style.display = 'none';
+            
+            document.getElementById('adminPassword').value = '';
+            showStatus('🔄 관리자 접근이 초기화되었습니다.', 'warning');
+        }
+        
+        function checkAdminAuthStatus() {
+            var savedAuth = localStorage.getItem('adminAuth');
+            
+            if (savedAuth === 'true') {
+                isAdminAuthenticated = true;
+                document.getElementById('adminAuthSection').style.display = 'none';
+                document.getElementById('githubSetup').style.display = 'block';
+            } else {
+                isAdminAuthenticated = false;
+                document.getElementById('adminAuthSection').style.display = 'block';
+                document.getElementById('githubSetup').style.display = 'none';
+                document.getElementById('uploadSection').style.display = 'none';
+            }
+        }
+
+        function saveGitHubConfig() {
+            if (!isAdminAuthenticated) {
+                showStatus('❌ 관리자 인증이 필요합니다.', 'error');
+                return;
+            }
+            
+            var username = document.getElementById('githubUsername').value.trim();
+            var repo = document.getElementById('githubRepo').value.trim();
+            
+            if (!username || !repo) {
+                showStatus('GitHub 사용자명과 저장소 이름을 입력해주세요.', 'error');
+                return;
+            }
+            
+            showStatus('GitHub 설정이 저장되었습니다!', 'success');
+            
+            document.getElementById('githubSetup').style.display = 'none';
+            document.getElementById('uploadSection').style.display = 'block';
+        }
+        
+        function testGitHubConnection() {
+            if (!isAdminAuthenticated) {
+                showStatus('❌ 관리자 인증이 필요합니다.', 'error');
+                return;
+            }
+            
+            var username = document.getElementById('githubUsername').value.trim();
+            var repo = document.getElementById('githubRepo').value.trim();
+            
+            if (!username || !repo) {
+                showStatus('사용자명과 저장소 이름을 먼저 입력해주세요.', 'error');
+                return;
+            }
+            
+            showStatus('✅ 저장소 연결 성공! (데모 모드)', 'success');
+        }
+
+        function processFileAndUpload() {
+            if (!isAdminAuthenticated) {
+                showStatus('❌ 관리자 인증이 필요합니다.', 'error');
+                return;
+            }
+            
+            showStatus('✅ 데모 모드에서는 샘플 데이터가 사용됩니다.', 'success');
+        }
+
+        function showStatus(message, type) {
+            var statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(function() {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
         }
 
         function searchStudent() {
@@ -688,6 +921,39 @@
         window.onload = function() {
             document.getElementById('noData').innerHTML = '<h3>✅ 성적 데이터 준비 완료</h3><p>출결번호를 입력하여 성적을 조회하세요.</p>';
         };
+
+        // 파일 업로드 관련 이벤트 리스너
+        var uploadArea = document.getElementById('uploadArea');
+        var fileInput = document.getElementById('fileInput');
+        var processBtn = document.getElementById('processBtn');
+        
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                var files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    processBtn.disabled = false;
+                }
+            });
+        }
+        
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                processBtn.disabled = !fileInput.files.length;
+            });
+        }
     </script>
 </body>
 </html>
