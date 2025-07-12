@@ -1903,39 +1903,6 @@
                 });
         }
 
-        // 드래그앤드롭 이벤트 설정
-        var uploadArea = document.getElementById('uploadArea');
-        var fileInput = document.getElementById('fileInput');
-        var processBtn = document.getElementById('processBtn');
-        
-        if (uploadArea) {
-            uploadArea.addEventListener('dragover', function(e) {
-                e.preventDefault();
-                uploadArea.classList.add('dragover');
-            });
-            
-            uploadArea.addEventListener('dragleave', function(e) {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-            });
-            
-            uploadArea.addEventListener('drop', function(e) {
-                e.preventDefault();
-                uploadArea.classList.remove('dragover');
-                var files = e.dataTransfer.files;
-                if (files.length > 0) {
-                    fileInput.files = files;
-                    processBtn.disabled = false;
-                }
-            });
-        }
-        
-        if (fileInput) {
-            fileInput.addEventListener('change', function() {
-                processBtn.disabled = !fileInput.files.length;
-            });
-        }
-
         function processFileAndUpload() {
             if (!isAdminAuthenticated) {
                 showStatus('❌ 관리자 인증이 필요합니다.', 'error');
