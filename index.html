@@ -229,6 +229,91 @@
             opacity: 0.8;
             margin-bottom: 5px;
         }
+
+        /* 등급 상승 분석 스타일 */
+        .grade-improvement-analysis {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #fbbf24;
+        }
+
+        .grade-improvement-analysis h4 {
+            margin-bottom: 15px;
+            color: #fbbf24;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .recent-performance {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 12px 0;
+        }
+
+        .recent-performance h5 {
+            color: #fbbf24;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+
+        .test-performance {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin: 8px 0;
+        }
+
+        .test-score {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.9em;
+        }
+
+        .improvement-target {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 12px 0;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .improvement-target h5 {
+            color: #4ade80;
+            margin-bottom: 10px;
+            font-size: 1em;
+        }
+
+        .target-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .target-item {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 3px solid #4ade80;
+        }
+
+        .target-subject {
+            font-weight: bold;
+            font-size: 0.9em;
+            color: #4ade80;
+        }
+
+        .target-details {
+            font-size: 0.85em;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
         
         /* 기존 스타일들 유지... */
         .admin-check {
@@ -836,7 +921,7 @@
         var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
 
         // 분석 함수
-        function generateAnalysis(student) {
+        function generateAIAnalysis(student) {
             console.log('분석 시작:', student.name);
             
             // 분석 섹션 표시
@@ -857,21 +942,16 @@
                 </div>
             `;
             
-            // 실제 분석 실행
+            // 실제 분석 실행 (시뮬레이션)
             setTimeout(function() {
-                try {
-                    var analysis = performAnalysis(student);
-                    displayAnalysis(analysis);
-                } catch (error) {
-                    console.error('분석 중 오류:', error);
-                    aiContentDiv.innerHTML = '<p style="color: #f87171;">분석 중 오류가 발생했습니다: ' + error.message + '</p>';
-                }
-            }, 2000);
+                var analysis = performAIAnalysis(student);
+                displayAIAnalysis(analysis);
+            }, 2000); // 2초 후 분석 결과 표시
         }
         
-        function performAnalysis(student) {
+        function performAIAnalysis(student) {
             var grades = student.grades;
-            var gradeKeys = Object.keys(grades);
+            var gradeKeys = Object.keys(grades).sort();
             
             if (gradeKeys.length === 0) {
                 return {
@@ -879,7 +959,8 @@
                     strengths: [],
                     weaknesses: [],
                     trends: [],
-                    recommendations: []
+                    recommendations: [],
+                    gradeImprovement: null
                 };
             }
             
@@ -1006,9 +1087,8 @@
                 });
             }
             
-            // 등급 상승 예측
-            var gradeTarget = bestGrade > 1 ? bestGrade - 1 : 1;
-            var scoreNeeded = avgScore < 90 ? 90 - avgScore : 0;
+            // 등급 상승 분석 (새로운 기능)
+            var gradeImprovement = analyzeGradeImprovement(student, gradeKeys);
             
             return {
                 summary: {
@@ -1022,14 +1102,159 @@
                     bestScore: bestScore,
                     bestTest: bestTest,
                     bestTestSource: bestTestSource,
-                    latestGrade: latestGrade,
-                    gradeTarget: gradeTarget,
-                    scoreNeeded: scoreNeeded
+                    latestGrade: latestGrade
                 },
                 strengths: strengths.slice(0, 3),
                 weaknesses: weaknesses.slice(0, 3),
                 trends: trends,
-                recommendations: recommendations
+                recommendations: recommendations,
+                gradeImprovement: gradeImprovement
+            };
+        }
+        
+        // 등급 상승 분석 함수 (완전히 새로운 구체적 분석)
+        function analyzeGradeImprovement(student, gradeKeys) {
+            if (gradeKeys.length < 2) return null;
+            
+            var grades = student.grades;
+            var recent4Tests = gradeKeys.slice(-4); // 최근 4회
+            var currentGrade = parseInt(grades[gradeKeys[gradeKeys.length - 1]].grade);
+            var targetGrade = Math.max(1, currentGrade - 1); // 목표 등급 (한 등급 상승)
+            
+            if (currentGrade === 1) return null; // 이미 1등급이면 분석 불필요
+            
+            // 최근 4회 성적 현황 분석
+            var recentPerformance = [];
+            var totalScores = [];
+            var totalGrades = [];
+            
+            recent4Tests.forEach(function(testName) {
+                var testData = grades[testName];
+                if (testData) {
+                    recentPerformance.push({
+                        testName: testName,
+                        grade: parseInt(testData.grade),
+                        score: parseInt(testData.score),
+                        needScore: testData.needScore || 0
+                    });
+                    totalScores.push(parseInt(testData.score));
+                    totalGrades.push(parseInt(testData.grade));
+                }
+            });
+            
+            // 평균 계산
+            var avgScore = totalScores.reduce((a, b) => a + b) / totalScores.length;
+            var avgGrade = totalGrades.reduce((a, b) => a + b) / totalGrades.length;
+            
+            // 목표 점수 계산 (등급별 기준점)
+            var gradeThresholds = {
+                1: 90, 2: 78, 3: 66, 4: 54, 5: 42, 6: 30
+            };
+            
+            var targetScore = gradeThresholds[targetGrade];
+            var scoreGap = targetScore - avgScore;
+            
+            // 달성 가능성 평가
+            var achievability = '';
+            var achievabilityColor = '';
+            if (scoreGap <= 3) {
+                achievability = '매우 높음 (소폭 개선으로 달성 가능)';
+                achievabilityColor = '#10b981';
+            } else if (scoreGap <= 7) {
+                achievability = '높음 (집중 학습으로 달성 가능)';
+                achievabilityColor = '#3b82f6';
+            } else if (scoreGap <= 12) {
+                achievability = '보통 (체계적 학습 필요)';
+                achievabilityColor = '#f59e0b';
+            } else {
+                achievability = '낮음 (장기적 계획 필요)';
+                achievabilityColor = '#ef4444';
+            }
+            
+            // 과목별 점수 손실 분석
+            var subjectAnalysis = {};
+            var subjectScores = {};
+            var subjectMaxScores = {};
+            
+            // 각 과목별 점수와 만점 수집
+            recent4Tests.forEach(function(testName) {
+                var testData = grades[testName];
+                if (testData && testData.details) {
+                    Object.keys(testData.details).forEach(function(subject) {
+                        if (!subjectScores[subject]) {
+                            subjectScores[subject] = [];
+                        }
+                        subjectScores[subject].push(testData.details[subject]);
+                        
+                        // 만점 정보 수집
+                        if (maxScores[testName] && maxScores[testName][subject]) {
+                            subjectMaxScores[subject] = maxScores[testName][subject];
+                        }
+                    });
+                }
+            });
+            
+            // 과목별 평균 점수 및 손실 점수 계산
+            var subjectStrategies = [];
+            Object.keys(subjectScores).forEach(function(subject) {
+                var scores = subjectScores[subject];
+                var avgSubjectScore = scores.reduce((a, b) => a + b) / scores.length;
+                var maxSubjectScore = subjectMaxScores[subject] || Math.max(...scores) + 5; // 만점 추정
+                
+                var lossPoints = Math.round(maxSubjectScore - avgSubjectScore);
+                var achievementRate = Math.round((avgSubjectScore / maxSubjectScore) * 100);
+                
+                // 개선 가능 점수 계산 (현실적 목표)
+                var improvablePoints = 0;
+                var strategy = '';
+                
+                if (achievementRate >= 90) {
+                    improvablePoints = Math.min(1, lossPoints);
+                    strategy = '실수 방지 집중';
+                } else if (achievementRate >= 80) {
+                    improvablePoints = Math.min(2, Math.round(lossPoints * 0.4));
+                    strategy = '안정화 필요';
+                } else if (achievementRate >= 70) {
+                    improvablePoints = Math.min(3, Math.round(lossPoints * 0.5));
+                    strategy = '기본기 보강 필요';
+                } else if (achievementRate >= 60) {
+                    improvablePoints = Math.min(4, Math.round(lossPoints * 0.6));
+                    strategy = '집중 학습 필요';
+                } else {
+                    improvablePoints = Math.min(5, Math.round(lossPoints * 0.7));
+                    strategy = '전면 재학습 필요';
+                }
+                
+                subjectStrategies.push({
+                    subject: subject,
+                    avgScore: Math.round(avgSubjectScore),
+                    maxScore: maxSubjectScore,
+                    lossPoints: lossPoints,
+                    achievementRate: achievementRate,
+                    improvablePoints: improvablePoints,
+                    strategy: strategy
+                });
+            });
+            
+            // 손실 점수 순으로 정렬
+            subjectStrategies.sort((a, b) => b.lossPoints - a.lossPoints);
+            
+            // 총 확보 가능 점수 계산
+            var totalImprovablePoints = subjectStrategies.reduce((sum, item) => sum + item.improvablePoints, 0);
+            
+            return {
+                currentGrade: currentGrade,
+                targetGrade: targetGrade,
+                recentPerformance: recentPerformance,
+                avgScore: Math.round(avgScore),
+                avgGrade: Math.round(avgGrade * 10) / 10,
+                targetScore: targetScore,
+                scoreGap: Math.round(scoreGap),
+                achievability: achievability,
+                achievabilityColor: achievabilityColor,
+                subjectStrategies: subjectStrategies,
+                totalImprovablePoints: totalImprovablePoints,
+                analysisCount: recent4Tests.length
             };
         }
         
@@ -1176,7 +1401,7 @@
             else return trendValue > 0 ? '완만한 상승' : '완만한 하락';
         }
         
-        function displayAnalysis(analysis) {
+        function displayAIAnalysis(analysis) {
             var aiContentDiv = document.getElementById('aiContent');
             var summary = analysis.summary;
             
@@ -1253,19 +1478,84 @@
                         }
                     </div>
                 </div>
-                
-                ${summary.gradeTarget && summary.scoreNeeded ? `
-                <div class="analysis-card" style="grid-column: 1 / -1;">
-                    <h4>🎯 구체적 등급 상승 전략</h4>
-                    ${generateSpecificUpgradeStrategy(student, analysis) || '<p>전략을 생성하는 중입니다...</p>'}
-                </div>
-                ` : ''}
             `;
+            
+            // 등급 상승 분석 추가 (완전히 새로운 구체적 분석)
+            if (analysis.gradeImprovement && analysis.gradeImprovement.subjectStrategies.length > 0) {
+                var improvement = analysis.gradeImprovement;
+                
+                html += `
+                    <div class="grade-improvement-analysis">
+                        <h4>🎯 구체적 등급 상승 전략</h4>
+                        
+                        <div class="recent-performance">
+                            <h5>📊 최근 ${improvement.analysisCount}회 시험 현황</h5>
+                            <div class="test-performance">
+                                ${improvement.recentPerformance.map(test => `
+                                    <div class="test-score">
+                                        <div style="font-weight: bold; font-size: 0.9em;">${test.testName}</div>
+                                        <div style="color: #fbbf24;">${test.grade}등급 ${test.score}점</div>
+                                        ${test.needScore !== 0 ? `<div style="font-size: 0.8em;">${test.needScore > 0 ? '+' : ''}${test.needScore}점 필요</div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div style="text-align: center; margin-top: 15px; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px;">
+                                <div style="font-size: 1.1em; font-weight: bold; color: #fbbf24;">
+                                    평균: ${improvement.avgGrade}등급 ${improvement.avgScore}점
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="improvement-target">
+                            <h5>🎯 ${improvement.targetGrade}등급 달성 목표</h5>
+                            <div style="margin-bottom: 15px;">
+                                <div style="font-size: 1.1em; margin-bottom: 8px;">
+                                    <strong>목표 점수:</strong> ${improvement.targetScore}점 이상 
+                                    <span style="color: ${improvement.scoreGap > 0 ? '#f87171' : '#10b981'};">
+                                        (현재 평균 대비 ${improvement.scoreGap > 0 ? '+' : ''}${improvement.scoreGap}점)
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.95em; color: ${improvement.achievabilityColor}; font-weight: bold;">
+                                    💚 달성 가능성: ${improvement.achievability}
+                                </div>
+                            </div>
+                            
+                            <h5 style="margin-top: 20px; margin-bottom: 15px;">📈 과목별 점수 확보 전략</h5>
+                            <div class="target-breakdown">
+                                ${improvement.subjectStrategies.slice(0, 5).map((strategy, index) => `
+                                    <div class="target-item">
+                                        <div class="target-subject">
+                                            ${index + 1}. ${strategy.subject}
+                                            <span style="color: #f87171; font-size: 0.9em; margin-left: 8px;">
+                                                평균 -${strategy.lossPoints}점
+                                            </span>
+                                        </div>
+                                        <div class="target-details">
+                                            성취도 ${strategy.achievementRate}% (${strategy.strategy}) → +${strategy.improvablePoints}점 확보 가능
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            
+                            <div style="text-align: center; margin-top: 20px; padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+                                <div style="font-size: 1.1em; font-weight: bold; color: #10b981;">
+                                    💡 총 확보 가능 점수: +${improvement.totalImprovablePoints}점
+                                </div>
+                                <div style="font-size: 0.9em; margin-top: 5px; opacity: 0.9;">
+                                    ${improvement.totalImprovablePoints >= Math.abs(improvement.scoreGap) ? 
+                                        '목표 달성을 위한 ' + Math.abs(improvement.scoreGap) + '점 확보 충분히 가능!' : 
+                                        '목표 달성을 위해 추가 ' + (Math.abs(improvement.scoreGap) - improvement.totalImprovablePoints) + '점 확보 노력 필요'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
             
             if (analysis.recommendations.length > 0) {
                 html += `
                     <div class="ai-recommendations">
-                        <h4>💡 AI 맞춤 학습 전략</h4>
+                        <h4>💡 정동민국어논술학원 맞춤 학습 전략</h4>
                         ${analysis.recommendations.map(r => `
                             <div class="recommendation-item">
                                 <div class="recommendation-priority">우선순위: ${r.priority}</div>
@@ -2073,7 +2363,7 @@
             }
             
             displayStudentInfo(student);
-            generateAnalysis(student); // 함수명 변경
+            generateAIAnalysis(student); // AI 분석 실행
             displaySummaryTable(student);
             displayGrades(student.grades);
             resultsDiv.style.display = 'block';
