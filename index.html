@@ -836,7 +836,7 @@
         var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
 
         // 분석 함수
-        function generateAIAnalysis(student) {
+        function generateAnalysis(student) {
             console.log('분석 시작:', student.name);
             
             // 분석 섹션 표시
@@ -857,14 +857,19 @@
                 </div>
             `;
             
-            // 실제 분석 실행 (시뮬레이션)
+            // 실제 분석 실행
             setTimeout(function() {
-                var analysis = performAIAnalysis(student);
-                displayAIAnalysis(analysis);
-            }, 2000); // 2초 후 분석 결과 표시
+                try {
+                    var analysis = performAnalysis(student);
+                    displayAnalysis(analysis);
+                } catch (error) {
+                    console.error('분석 중 오류:', error);
+                    aiContentDiv.innerHTML = '<p style="color: #f87171;">분석 중 오류가 발생했습니다: ' + error.message + '</p>';
+                }
+            }, 2000);
         }
         
-        function performAIAnalysis(student) {
+        function performAnalysis(student) {
             var grades = student.grades;
             var gradeKeys = Object.keys(grades);
             
@@ -1171,7 +1176,7 @@
             else return trendValue > 0 ? '완만한 상승' : '완만한 하락';
         }
         
-        function displayAIAnalysis(analysis) {
+        function displayAnalysis(analysis) {
             var aiContentDiv = document.getElementById('aiContent');
             var summary = analysis.summary;
             
@@ -1252,7 +1257,7 @@
                 ${summary.gradeTarget && summary.scoreNeeded ? `
                 <div class="analysis-card" style="grid-column: 1 / -1;">
                     <h4>🎯 구체적 등급 상승 전략</h4>
-                    ${generateSpecificUpgradeStrategy(student, analysis)}
+                    ${generateSpecificUpgradeStrategy(student, analysis) || '<p>전략을 생성하는 중입니다...</p>'}
                 </div>
                 ` : ''}
             `;
@@ -2068,7 +2073,7 @@
             }
             
             displayStudentInfo(student);
-            generateAIAnalysis(student); // AI 분석 실행
+            generateAnalysis(student); // 함수명 변경
             displaySummaryTable(student);
             displayGrades(student.grades);
             resultsDiv.style.display = 'block';
