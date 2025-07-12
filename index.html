@@ -1251,14 +1251,8 @@
                 
                 ${summary.gradeTarget && summary.scoreNeeded ? `
                 <div class="analysis-card" style="grid-column: 1 / -1;">
-                    <h4>🎯 등급 상승 전망</h4>
-                    <p><strong>${summary.gradeTarget}등급 달성 목표:</strong> ${summary.gradeTarget === 1 ? '90점 이상' : '약 ' + (summary.avgScore + summary.scoreNeeded) + '점 이상'}</p>
-                    <p><strong>현재 최고점:</strong> ${summary.bestScore}점</p>
-                    <p><strong>추가 필요:</strong> ${summary.scoreNeeded}점</p>
-                    ${summary.scoreNeeded <= 7 ? 
-                        '<p style="color: #10b981;">💚 단기간 내 목표 달성 가능성이 높습니다!</p>' : 
-                        '<p style="color: #fbbf24;">💛 꾸준한 학습으로 목표 달성 가능합니다.</p>'
-                    }
+                    <h4>🎯 구체적 등급 상승 전략</h4>
+                    ${generateSpecificUpgradeStrategy(student, analysis)}
                 </div>
                 ` : ''}
             `;
