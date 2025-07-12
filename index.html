@@ -1214,24 +1214,19 @@
                 var potential = Math.max(0, maxRatio - recent4Avg);
                 
                 var strategy = '';
-                var strategyColor = '';
                 var possibleGain = 0;
                 
                 if (recent4Avg < 60) {
                     strategy = '기본기 보강 필요';
-                    strategyColor = '#ef4444'; // 빨간색
                     possibleGain = Math.min(4, potential * 0.2); // 20% 성취도 향상 = 약 4점
                 } else if (recent4Avg < 80) {
                     strategy = '안정화 필요';
-                    strategyColor = '#f59e0b'; // 주황색
                     possibleGain = Math.min(3, potential * 0.15);
                 } else if (recent4Avg < 95) {
                     strategy = '실수 방지 집중';
-                    strategyColor = '#10b981'; // 녹색
                     possibleGain = Math.min(2, potential * 0.1);
                 } else {
                     strategy = '현재 수준 유지';
-                    strategyColor = '#6366f1'; // 보라색
                     possibleGain = 1;
                 }
                 
@@ -1240,7 +1235,6 @@
                         subject: subject,
                         currentAvg: Math.round(recent4Avg),
                         strategy: strategy,
-                        strategyColor: strategyColor,
                         possibleGain: Math.round(possibleGain * 10) / 10
                     });
                     totalPossibleGain += possibleGain;
@@ -1529,38 +1523,32 @@
                         </div>
                         
                         <div class="target-analysis">
-    <div class="target-header">
-        <div>
-            <div class="target-grade" style="font-size: 1.4em; font-weight: 900;">${strategy.targetGrade}등급 달성 전략</div>
-            <div style="font-size: 1.3em; opacity: 0.95; margin-top: 8px; font-weight: 700;">
-                목표 점수: <strong style="font-size: 1.2em; color: #ffffff; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">${strategy.targetScore}점 이상</strong> 
-                <span style="font-size: 1.4em; font-weight: 900; color: #10b981; background: rgba(16, 185, 129, 0.3); padding: 6px 14px; border-radius: 16px; margin-left: 12px; border: 2px solid rgba(16, 185, 129, 0.5);">
-                    현재 평균 대비 ${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점
-                </span>
-            </div>
-        </div>
-        <div class="target-possibility ${possibilityClass}" style="font-size: 1.1em; font-weight: 700; padding: 8px 16px;">
-            ${strategy.possibility === 'high' ? '💚' : strategy.possibility === 'medium' ? '💛' : '🔶'} 달성 가능성: ${possibilityText}
-        </div>
-    </div>
-</div>
+                            <div class="target-header">
+                                <div>
+                                    <div class="target-grade">${strategy.targetGrade}등급 달성 전략</div>
+                                    <div style="font-size: 0.9em; opacity: 0.8;">목표 점수: ${strategy.targetScore}점 이상 (현재 평균 대비 ${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점)</div>
+                                </div>
+                                <div class="target-possibility ${possibilityClass}">
+                                    ${strategy.possibility === 'high' ? '💚' : strategy.possibility === 'medium' ? '💛' : '🔶'} 달성 가능성: ${possibilityText}
+                                </div>
+                            </div>
+                        </div>
                         
-                       ${strategy.subjectStrategies.map((subj, i) => `
-    <div class="subject-strategy-item">
-        <div class="subject-strategy-left">
-            <div class="subject-name">${i + 1}. ${subj.subject}</div>
-            <div class="subject-detail">
-                성취도 ${subj.currentAvg}% 
-                <span style="color: white; font-weight: bold; padding: 4px 10px; background: ${subj.strategyColor}; border-radius: 12px; margin-left: 8px; font-size: 0.9em; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">
-                    ${subj.strategy}
-                </span>
-            </div>
-        </div>
-        <div class="subject-strategy-right">
-            <div class="points-gain">+${subj.possibleGain}점 확보 가능</div>
-        </div>
-    </div>
-`).join('')}
+                        ${strategy.subjectStrategies.length > 0 ? `
+                            <div>
+                                <h5 style="margin: 15px 0 10px 0; color: rgba(255,255,255,0.9);">📈 과목별 점수 확보 전략</h5>
+                                <div class="subject-strategy-list">
+                                    ${strategy.subjectStrategies.map((subj, i) => `
+                                        <div class="subject-strategy-item">
+                                            <div class="subject-strategy-left">
+                                                <div class="subject-name">${i + 1}. ${subj.subject}</div>
+                                                <div class="subject-detail">성취도 ${subj.currentAvg}% (${subj.strategy})</div>
+                                            </div>
+                                            <div class="subject-strategy-right">
+                                                <div class="points-gain">+${subj.possibleGain}점 확보 가능</div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
                                 </div>
                                 
                                 <div class="total-strategy">
@@ -1595,18 +1583,6 @@
             }
             
             aiContentDiv.innerHTML = html;
-        }
-
-        // HEX 색상을 RGB로 변환하는 헬퍼 함수
-        function hexToRgb(hex) {
-            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-            if (result) {
-                var r = parseInt(result[1], 16);
-                var g = parseInt(result[2], 16);
-                var b = parseInt(result[3], 16);
-                return r + ',' + g + ',' + b;
-            }
-            return '0,0,0';
         }
 
         // 관리자 인증 확인
