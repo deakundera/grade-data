@@ -893,7 +893,7 @@
             </div>
         </div>
         
-        <!-- 관리자 탭 -->
+        <!-- 관리자 탭 (기존과 동일하므로 생략) -->
         <div id="adminTab" class="tab-content">
             <!-- 관리자 인증 섹션 -->
             <div id="adminAuthSection" class="admin-check">
@@ -971,27 +971,6 @@
         var isAdminAuthenticated = false;
         
         var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
-
-        // 전략 색상 및 아이콘 함수
-        function getStrategyColor(strategy) {
-            switch(strategy) {
-                case '기본기 보강 필요': return '#ef4444';  // 빨간색
-                case '안정화 필요': return '#f59e0b';       // 주황색
-                case '실수 방지 집중': return '#10b981';    // 녹색
-                case '현재 수준 유지': return '#6366f1';    // 보라색
-                default: return 'rgba(255,255,255,0.8)';
-            }
-        }
-        
-        function getStrategyIcon(strategy) {
-            switch(strategy) {
-                case '기본기 보강 필요': return '🔴';
-                case '안정화 필요': return '🟠';
-                case '실수 방지 집중': return '🟢';
-                case '현재 수준 유지': return '🟣';
-                default: return '⚪';
-            }
-        }
 
         // 분석 함수
         function generateAIAnalysis(student) {
@@ -1457,6 +1436,49 @@
                         ${analysis.strengths.length > 0 ? 
                             analysis.strengths.map((s, i) => `
                                 <div style="margin: 8px 0;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${i + 1}. ${s.subject}</span>
+                                        <span style="font-weight: bold; color: #10b981;">${s.average}%</span>
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar-fill grade-excellent" style="width: ${s.average}%"></div>
+                                    </div>
+                                </div>
+                            `).join('') : 
+                            '<p style="color: rgba(255,255,255,0.8);">강점 과목을 분석하려면 더 많은 데이터가 필요합니다.</p>'
+                        }
+                    </div>
+                </div>
+                
+                <div class="analysis-grid">
+                    <div class="analysis-card">
+                        <h4>⚠️ 개선 필요 과목</h4>
+                        ${analysis.weaknesses.length > 0 ? 
+                            analysis.weaknesses.map((w, i) => `
+                                <div style="margin: 8px 0;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${i + 1}. ${w.subject}</span>
+                                        <span style="font-weight: bold; color: #f87171; font-size: 0.9em;">${w.average}%</span>
+                                    </div>
+                                    <div style="font-size: 0.8em; color: rgba(255,255,255,0.8); margin-top: 4px;">
+                                        ${w.description}
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
+                                    </div>
+                                </div>
+                            `).join('') : 
+                            '<p style="color: rgba(255,255,255,0.8);">모든 과목이 양호한 상태입니다.</p>'
+                        }
+                    </div>
+                    
+                    <div class="analysis-card">
+                        <h4>📈 성적 추이 분석</h4>
+                        ${analysis.trends.length > 0 ? 
+                            analysis.trends.map(t => `
+                                <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
+                                    <span class="trend-${t.type}">${t.type === 'up' ? '📈' : '📉'}</span>
+                                    <span style="flex: 1;">${t.subject}</span>
                                     <div style="display: flex; flex-direction: column; align-items: end;">
                                         <span style="font-weight: bold; color: ${t.type === 'up' ? '#10b981' : '#f87171'};">
                                             ${t.intensity}
@@ -1504,10 +1526,7 @@
                             <div class="target-header">
                                 <div>
                                     <div class="target-grade">${strategy.targetGrade}등급 달성 전략</div>
-                                    <div style="font-size: 1.0em; font-weight: 500; color: rgba(255,255,255,0.95); margin-top: 8px;">
-                                        목표 점수: <span style="font-weight: bold; color: #4ade80;">${strategy.targetScore}점 이상</span> 
-                                        (현재 평균 대비 <span style="font-weight: bold; color: ${strategy.neededPoints > 0 ? '#f87171' : '#4ade80'};">${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점</span>)
-                                    </div>
+                                    <div style="font-size: 0.9em; opacity: 0.8;">목표 점수: ${strategy.targetScore}점 이상 (현재 평균 대비 ${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점)</div>
                                 </div>
                                 <div class="target-possibility ${possibilityClass}">
                                     ${strategy.possibility === 'high' ? '💚' : strategy.possibility === 'medium' ? '💛' : '🔶'} 달성 가능성: ${possibilityText}
@@ -1523,9 +1542,7 @@
                                         <div class="subject-strategy-item">
                                             <div class="subject-strategy-left">
                                                 <div class="subject-name">${i + 1}. ${subj.subject}</div>
-                                                <div class="subject-detail" style="color: ${getStrategyColor(subj.strategy)}; font-weight: 500;">
-                                                    성취도 ${subj.currentAvg}% (${getStrategyIcon(subj.strategy)} ${subj.strategy})
-                                                </div>
+                                                <div class="subject-detail">성취도 ${subj.currentAvg}% (${subj.strategy})</div>
                                             </div>
                                             <div class="subject-strategy-right">
                                                 <div class="points-gain">+${subj.possibleGain}점 확보 가능</div>
@@ -2136,47 +2153,525 @@
                                 if (subject.includes('화법')) {
                                     var forcedMax = 22;
                                     if (sheetName === '모클5회' || sheetName === '모클4회') {
-                                        ="display: flex; justify-content: space-between; align-items: center;">
-                                        <span>${i + 1}. ${s.subject}</span>
-                                        <span style="font-weight: bold; color: #10b981;">${s.average}%</span>
-                                    </div>
-                                    <div class="progress-bar-container">
-                                        <div class="progress-bar-fill grade-excellent" style="width: ${s.average}%"></div>
-                                    </div>
-                                </div>
-                            `).join('') : 
-                            '<p style="color: rgba(255,255,255,0.8);">강점 과목을 분석하려면 더 많은 데이터가 필요합니다.</p>'
+                                        forcedMax = 13;
+                                    }
+                                    ratios[subject] = Math.round((subjectScore / forcedMax) * 100);
+                                    console.log('   → 강제 계산:', subjectScore + '/' + forcedMax + ' = ' + ratios[subject] + '%');
+                                }
+                            }
                         }
-                    </div>
-                </div>
-                
-                <div class="analysis-grid">
-                    <div class="analysis-card">
-                        <h4>⚠️ 개선 필요 과목</h4>
-                        ${analysis.weaknesses.length > 0 ? 
-                            analysis.weaknesses.map((w, i) => `
-                                <div style="margin: 8px 0;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span>${i + 1}. ${w.subject}</span>
-                                        <span style="font-weight: bold; color: #f87171; font-size: 0.9em;">${w.average}%</span>
-                                    </div>
-                                    <div style="font-size: 0.8em; color: rgba(255,255,255,0.8); margin-top: 4px;">
-                                        ${w.description}
-                                    </div>
-                                    <div class="progress-bar-container">
-                                        <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
-                                    </div>
-                                </div>
-                            `).join('') : 
-                            '<p style="color: rgba(255,255,255,0.8);">모든 과목이 양호한 상태입니다.</p>'
-                        }
-                    </div>
+                    }
                     
-                    <div class="analysis-card">
-                        <h4>📈 성적 추이 분석</h4>
-                        ${analysis.trends.length > 0 ? 
-                            analysis.trends.map(t => `
-                                <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
-                                    <span class="trend-${t.type}">${t.type === 'up' ? '📈' : '📉'}</span>
-                                    <span style="flex: 1;">${t.subject}</span>
-                                    <div style
+                    studentsByName[name].grades[sheetName] = {
+                        grade: grade,
+                        score: score,
+                        className: className,
+                        details: details,
+                        ratios: ratios,
+                        needScore: needScore,
+                        gradeCut: gradeCut,
+                        source: source
+                    };
+                }
+            }
+            
+            studentByNumber = {};
+            for (var attendanceNumber in attendanceToNameMap) {
+                var name = attendanceToNameMap[attendanceNumber];
+                if (studentsByName[name]) {
+                    studentByNumber[attendanceNumber] = studentsByName[name];
+                }
+            }
+            
+            window.discoveredTestSheets = testSheetNames;
+            window.attendanceToNameMap = attendanceToNameMap;
+            isDataLoaded = true;
+            
+            console.log('최종 처리된 학생 수:', Object.keys(studentByNumber).length);
+        }
+
+        function extractMaxScoresDirectly(workbook, testSheetNames) {
+            console.log('각 시트에서 직접 만점 추출 시작...');
+            
+            maxScores = {};
+            
+            var hwaBubHardCoded = {
+                '모클1회': 22, '모클2회': 22, '모클3회': 22, '모클4회': 13, '모클5회': 13,
+                '모클6회': 22, '모클7회': 22, '모클8회': 22, '모클9회': 22, '모클10회': 15,
+                '모클11회': 22, '모클12회': 22
+            };
+            
+            for (var i = 0; i < testSheetNames.length; i++) {
+                var sheetName = testSheetNames[i];
+                if (!workbook.Sheets[sheetName]) continue;
+                
+                var worksheet = workbook.Sheets[sheetName];
+                var sheetData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+                
+                if (sheetData.length <= 1) continue;
+                
+                var headers = sheetData[0];
+                console.log(sheetName + ' 헤더:', headers);
+                
+                maxScores[sheetName] = {};
+                
+                for (var colIndex = 5; colIndex < Math.min(14, headers.length); colIndex++) {
+                    var subject = headers[colIndex];
+                    if (!subject) continue;
+                    
+                    var maxScore = 0;
+                    var validScores = [];
+                    
+                    for (var rowIndex = 1; rowIndex < sheetData.length; rowIndex++) {
+                        var row = sheetData[rowIndex];
+                        if (row && row[colIndex] !== null && row[colIndex] !== undefined && row[colIndex] !== '') {
+                            var score = parseInt(row[colIndex]);
+                            if (!isNaN(score) && score > 0) {
+                                validScores.push(score);
+                                maxScore = Math.max(maxScore, score);
+                            }
+                        }
+                    }
+                    
+                    if (maxScore > 0) {
+                        maxScores[sheetName][subject] = maxScore;
+                        console.log('직접 추출된 만점:', sheetName, '"' + subject + '"', '=', maxScore + '점', '(유효 점수:', validScores.length + '개)');
+                        
+                        if (subject.includes('화법')) {
+                            console.log('🎯 화법과 작문 만점 확정:', sheetName, '=', maxScore + '점');
+                        }
+                    } else {
+                        console.log('⚠️ 유효한 점수 없음:', sheetName, subject);
+                    }
+                }
+                
+                var hwaBubFound = false;
+                for (var subj in maxScores[sheetName]) {
+                    if (subj.includes('화법')) {
+                        hwaBubFound = true;
+                        break;
+                    }
+                }
+                
+                if (!hwaBubFound && hwaBubHardCoded[sheetName]) {
+                    for (var h = 0; h < headers.length; h++) {
+                        if (headers[h] && headers[h].includes('화법')) {
+                            maxScores[sheetName][headers[h]] = hwaBubHardCoded[sheetName];
+                            console.log('🔧 화법과 작문 하드코딩 적용:', sheetName, headers[h], '=', hwaBubHardCoded[sheetName] + '점');
+                            break;
+                        }
+                    }
+                }
+                
+                console.log(sheetName + ' 추출 완료:', maxScores[sheetName]);
+            }
+            
+            console.log('모든 시트 만점 추출 완료:', maxScores);
+        }
+        
+        function showProgress(show) {
+            document.getElementById('progressContainer').style.display = show ? 'block' : 'none';
+        }
+        
+        function updateProgress(percent, message) {
+            var progressBar = document.getElementById('progressBar');
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = message || (percent + '%');
+        }
+        
+        function showStatus(message, type) {
+            var statusDiv = document.getElementById('statusMessage');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+            statusDiv.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(function() {
+                    statusDiv.style.display = 'none';
+                }, 5000);
+            }
+        }
+        
+        function updateDataSummary() {
+            var summaryDiv = document.getElementById('dataSummary');
+            var gridDiv = document.getElementById('summaryGrid');
+            
+            var totalStudents = Object.keys(studentByNumber).length;
+            var mappingCount = window.attendanceToNameMap ? Object.keys(window.attendanceToNameMap).length : 0;
+            var discoveredSheets = window.discoveredTestSheets ? window.discoveredTestSheets.length : 0;
+            
+            var html = '<div class="summary-item"><div class="summary-value">' + mappingCount + '</div><div class="summary-label">매핑 테이블 학생수</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + totalStudents + '</div><div class="summary-label">성적 데이터 학생수</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + discoveredSheets + '</div><div class="summary-label">발견된 시트 수</div></div>';
+            
+            if (githubConfig.username && githubConfig.repo) {
+                html += '<div class="summary-item"><div class="summary-value" style="font-size: 0.9em;">' + githubConfig.username + '/' + githubConfig.repo + '</div><div class="summary-label">GitHub 저장소</div></div>';
+            }
+            
+            gridDiv.innerHTML = html;
+            summaryDiv.style.display = 'block';
+        }
+        
+        function updateDataStatus(message, isSuccess, lastUpdated) {
+            var statusMessage = document.getElementById('dataStatusMessage');
+            var noDataDiv = document.getElementById('noData');
+            
+            if (isSuccess && lastUpdated) {
+                var updateDate = new Date(lastUpdated);
+                var formattedDate = updateDate.toLocaleDateString('ko-KR') + ' ' + updateDate.toLocaleTimeString('ko-KR', {hour: '2-digit', minute: '2-digit'});
+                statusMessage.innerHTML = message + '<br><small style="color: #666;">마지막 업데이트: ' + formattedDate + '</small>';
+                noDataDiv.style.background = '#d4edda';
+                noDataDiv.style.color = '#155724';
+                noDataDiv.style.border = '1px solid #c3e6cb';
+            } else {
+                statusMessage.innerHTML = message;
+                noDataDiv.style.background = '#f8f9fa';
+                noDataDiv.style.color = '#666';
+                noDataDiv.style.border = 'none';
+            }
+        }
+        
+        function updateStudentTab() {
+            var noDataDiv = document.getElementById('noData');
+            var searchBtn = document.getElementById('searchBtn');
+            
+            if (isDataLoaded && Object.keys(studentByNumber).length > 0) {
+                searchBtn.disabled = false;
+                
+                if (githubConfig.username && githubConfig.repo) {
+                    var shareableUrl = window.location.origin + window.location.pathname + 
+                                     '?username=' + githubConfig.username + '&repo=' + githubConfig.repo;
+                    document.getElementById('shareableUrl').textContent = shareableUrl;
+                    document.getElementById('urlInfo').style.display = 'block';
+                }
+            } else {
+                searchBtn.disabled = true;
+                document.getElementById('urlInfo').style.display = 'none';
+            }
+        }
+
+        function searchStudent() {
+            if (!isDataLoaded) {
+                alert('데이터가 로드되지 않았습니다.');
+                return;
+            }
+            
+            var query = document.getElementById('searchInput').value.trim();
+            var resultsDiv = document.getElementById('results');
+            var noResultsDiv = document.getElementById('noResults');
+            var noDataDiv = document.getElementById('noData');
+            
+            resultsDiv.style.display = 'none';
+            noResultsDiv.style.display = 'none';
+            noDataDiv.style.display = 'none';
+            
+            if (!query) {
+                alert('출결번호를 입력해주세요.');
+                return;
+            }
+            
+            var student = studentByNumber[query];
+            
+            if (!student) {
+                noResultsDiv.style.display = 'block';
+                return;
+            }
+            
+            displayStudentInfo(student);
+            generateAIAnalysis(student); // AI 분석 실행
+            displaySummaryTable(student);
+            displayGrades(student.grades);
+            resultsDiv.style.display = 'block';
+        }
+
+        function displayStudentInfo(student) {
+            var studentInfoDiv = document.getElementById('studentInfo');
+            var gradeKeys = Object.keys(student.grades);
+            var totalTests = window.discoveredTestSheets ? window.discoveredTestSheets.length : 12;
+            var attendedTests = gradeKeys.length;
+            
+            studentInfoDiv.innerHTML = 
+                '<div class="student-info">' +
+                '<h2>👨‍🎓 ' + student.name + '</h2>' +
+                '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">' +
+                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">출결번호:</span><span style="color: #333; font-weight: bold;">' + student.attendanceNumber + '</span></div>' +
+                '<div style="display: flex; justify-content: space-between;"><span style="font-weight: 600; color: #555;">응시 현황:</span><span style="color: #333; font-weight: bold;">' + attendedTests + '/' + totalTests + '회</span></div>' +
+                '</div></div>';
+        }
+
+        function displaySummaryTable(student) {
+            var summaryTableDiv = document.getElementById('summaryTable');
+            
+            var allTests = window.discoveredTestSheets || ['모클1회', '모클2회', '모클3회'];
+            var totalTests = allTests.length;
+            
+            var tableHtml = '<div class="summary-table">';
+            tableHtml += '<h3>📊 전체 성적 현황 (' + totalTests + '개 시험)</h3>';
+            tableHtml += '<table class="grade-table">';
+            tableHtml += '<thead><tr>';
+            tableHtml += '<th class="test-name">시험</th>';
+            tableHtml += '<th>등급</th>';
+            tableHtml += '<th>점수</th>';
+            tableHtml += '<th>등급컷</th>';
+            tableHtml += '<th>출처</th>';
+            tableHtml += '</tr></thead><tbody>';
+            
+            for (var i = 0; i < allTests.length; i++) {
+                var testName = allTests[i];
+                var gradeData = student.grades[testName];
+                
+                tableHtml += '<tr>';
+                tableHtml += '<td class="test-name">' + testName + '</td>';
+                
+                if (gradeData) {
+                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '">' + gradeData.grade + '</td>';
+                    tableHtml += '<td class="score-cell">' + gradeData.score + '</td>';
+                    tableHtml += '<td class="score-cell">' + (gradeData.gradeCut || '-') + '</td>';
+                    tableHtml += '<td class="source-cell">' + (gradeData.source || '-') + '</td>';
+                } else {
+                    tableHtml += '<td class="absent-cell">미응시</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                    tableHtml += '<td class="absent-cell">-</td>';
+                }
+                
+                tableHtml += '</tr>';
+            }
+            
+            tableHtml += '</tbody></table></div>';
+            
+            tableHtml += '<div class="summary-table" style="margin-top: 30px;">';
+            tableHtml += '<h3>📈 과목별 성취도 비율 현황</h3>';
+            tableHtml += '<div style="overflow-x: auto;">';
+            tableHtml += '<table class="grade-table" style="min-width: 1200px; font-size: 0.8em;">';
+            tableHtml += '<thead><tr>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">시험</th>';
+            tableHtml += '<th style="min-width: 50px; font-size: 0.85em;">등급</th>';
+            tableHtml += '<th style="min-width: 50px; font-size: 0.85em;">점수</th>';
+            tableHtml += '<th style="min-width: 60px; font-size: 0.85em;">등급컷 필요점수</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">화법과 작문</th>';
+            tableHtml += '<th style="min-width: 60px; font-size: 0.85em;">문법</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(인문)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(사회)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">독서(과학)</th>';
+            tableHtml += '<th style="min-width: 80px; font-size: 0.85em;">문학(현대시)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(현대소설)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(고전시가)</th>';
+            tableHtml += '<th style="min-width: 90px; font-size: 0.85em;">문학(고전소설)</th>';
+            tableHtml += '<th style="min-width: 70px; font-size: 0.85em;">시험출처</th>';
+            tableHtml += '</tr></thead><tbody>';
+            
+            for (var i = 0; i < allTests.length; i++) {
+                var testName = allTests[i];
+                var gradeData = student.grades[testName];
+                
+                tableHtml += '<tr>';
+                tableHtml += '<td class="test-name" style="font-size: 0.85em;">' + testName + '</td>';
+                
+                if (gradeData) {
+                    tableHtml += '<td class="grade-cell grade-' + gradeData.grade + '" style="font-size: 0.85em;">' + gradeData.grade + '</td>';
+                    tableHtml += '<td class="score-cell" style="font-size: 0.85em;">' + gradeData.score + '</td>';
+                    
+                    var needScoreDisplay = '';
+                    if (gradeData.needScore !== null && gradeData.needScore !== undefined) {
+                        needScoreDisplay = gradeData.needScore > 0 ? '(' + gradeData.needScore + ')' : '(' + gradeData.needScore + ')';
+                    }
+                    tableHtml += '<td class="score-cell" style="font-size: 0.85em;">' + needScoreDisplay + '</td>';
+                    
+                    var subjectOrder = ['화법과 작문', '문법', '독서(인문)', '독서(사회)', '독서(과학)', 
+                                       '문학(현대시)', '문학(현대소설)', '문학(고전시가)', '문학(고전소설)'];
+                    
+                    for (var j = 0; j < subjectOrder.length; j++) {
+                        var targetSubject = subjectOrder[j];
+                        var ratio = 0;
+                        
+                        for (var actualSubject in gradeData.ratios) {
+                            if (actualSubject.includes(targetSubject.split('(')[0]) || 
+                                targetSubject.includes(actualSubject.split('(')[0])) {
+                                ratio = gradeData.ratios[actualSubject] || 0;
+                                break;
+                            }
+                        }
+                        
+                        var ratioColor = ratio >= 90 ? '#e74c3c' : ratio >= 80 ? '#f39c12' : ratio >= 70 ? '#f1c40f' : 
+                                        ratio >= 60 ? '#2ecc71' : ratio >= 50 ? '#3498db' : '#95a5a6';
+                        var ratioText = ratio > 0 ? ratio + '%' : '-';
+                        
+                        tableHtml += '<td style="color: ' + ratioColor + '; font-weight: bold; text-align: center; font-size: 0.85em;">' + ratioText + '</td>';
+                    }
+                    
+                    tableHtml += '<td class="source-cell" style="font-size: 0.85em;">' + (gradeData.source || '-') + '</td>';
+                } else {
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">미응시</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
+                    for (var k = 0; k < 9; k++) {
+                        tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
+                    }
+                    tableHtml += '<td class="absent-cell" style="font-size: 0.85em;">-</td>';
+                }
+                
+                tableHtml += '</tr>';
+            }
+            
+            tableHtml += '</tbody></table></div></div>';
+            
+            summaryTableDiv.innerHTML = tableHtml;
+        }
+
+        function displayGrades(grades) {
+            var gradeCardsDiv = document.getElementById('gradeCards');
+            gradeCardsDiv.innerHTML = '';
+            
+            var testNames = Object.keys(grades);
+            
+            for (var i = 0; i < testNames.length; i++) {
+                var testName = testNames[i];
+                var gradeData = grades[testName];
+                var gradeCard = document.createElement('div');
+                gradeCard.className = 'grade-card';
+                
+                var detailsHtml = '';
+                if (gradeData.details) {
+                    var detailKeys = Object.keys(gradeData.details);
+                    for (var j = 0; j < detailKeys.length; j++) {
+                        var subject = detailKeys[j];
+                        var score = gradeData.details[subject];
+                        var ratio = gradeData.ratios[subject] || 0;
+                        var ratioColor = ratio >= 80 ? '#e74c3c' : ratio >= 60 ? '#f39c12' : ratio >= 40 ? '#f1c40f' : '#95a5a6';
+                        
+                        detailsHtml += 
+                            '<div class="grade-item">' +
+                            '<span class="grade-label">' + subject + '</span>' +
+                            '<span class="grade-value">' + score + '점 ' +
+                            '<span style="color: ' + ratioColor + '; font-size: 0.85em;">(' + ratio + '%)</span>' +
+                            '</span></div>';
+                    }
+                }
+                
+                var cutInfo = '';
+                if (gradeData.gradeCut) {
+                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.gradeCut + '점</div><div class="grade-summary-label">내 등급컷</div></div>';
+                }
+                
+                if (gradeData.needScore !== null && gradeData.needScore !== undefined) {
+                    var needScoreDisplay = gradeData.needScore > 0 ? '+' + gradeData.needScore : gradeData.needScore;
+                    var needScoreColor = gradeData.needScore <= 0 ? '#2ecc71' : '#e74c3c';
+                    cutInfo += '<div class="grade-summary-item"><div class="grade-summary-value" style="color: ' + needScoreColor + '">' + needScoreDisplay + '점</div><div class="grade-summary-label">한등급↑ 필요점수</div></div>';
+                }
+                
+                var sourceInfo = '';
+                if (gradeData.source && gradeData.source.trim() !== '') {
+                    sourceInfo = '<div class="grade-summary-item"><div class="grade-summary-value" style="font-size: 0.9em; color: #666;">' + gradeData.source + '</div><div class="grade-summary-label">출처</div></div>';
+                }
+                
+                gradeCard.innerHTML = 
+                    '<h3>📝 ' + testName + '</h3>' +
+                    '<div class="grade-summary">' +
+                    '<div class="grade-summary-item"><div class="grade-summary-value grade-' + gradeData.grade + '">' + gradeData.grade + '등급</div><div class="grade-summary-label">내 등급</div></div>' +
+                    '<div class="grade-summary-item"><div class="grade-summary-value">' + gradeData.score + '점</div><div class="grade-summary-label">내 점수</div></div>' +
+                    cutInfo + sourceInfo + '</div>' +
+                    (detailsHtml ? '<div style="margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 8px;"><h4 style="margin-bottom: 10px; color: #333; font-size: 1em;">📊 과목별 성취도 (점수 및 비율)</h4><div class="grade-details">' + detailsHtml + '</div></div>' : '');
+                
+                gradeCardsDiv.appendChild(gradeCard);
+            }
+        }
+
+        // 이벤트 리스너
+        document.getElementById('searchInput').addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/[^0-9]/g, '');
+            if (e.target.value.length > 4) {
+                e.target.value = e.target.value.slice(0, 4);
+            }
+        });
+
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchStudent();
+            }
+        });
+
+        // 페이지 로드 시 실행
+        window.onload = function() {
+            console.log('페이지 로드 시작');
+            
+            // URL 파라미터에서 설정 확인
+            var urlParams = new URLSearchParams(window.location.search);
+            var urlUsername = urlParams.get('username');
+            var urlRepo = urlParams.get('repo');
+            
+            var autoConfig = null;
+            
+            // URL 파라미터에서 설정을 찾았을 때
+            if (urlUsername && urlRepo) {
+                console.log('URL 파라미터에서 설정 발견:', urlUsername, urlRepo);
+                autoConfig = {
+                    username: urlUsername,
+                    repo: urlRepo,
+                    token: ''
+                };
+            } else {
+                // GitHub Pages 자동 감지
+                var hostname = window.location.hostname;
+                var pathname = window.location.pathname;
+                
+                if (hostname.includes('.github.io')) {
+                    var username = hostname.split('.')[0];
+                    var repo = pathname.split('/')[1];
+                    
+                    if (username && repo) {
+                        console.log('GitHub Pages에서 자동 감지된 설정:', username, repo);
+                        autoConfig = {
+                            username: username,
+                            repo: repo,
+                            token: ''
+                        };
+                    }
+                }
+            }
+            
+            // 저장된 GitHub 설정 불러오기
+            var savedConfig = localStorage.getItem('githubConfig');
+            var savedDataUrl = localStorage.getItem('dataUrl');
+            
+            var finalConfig = null;
+            var configSource = '';
+            
+            if (savedConfig && savedDataUrl) {
+                try {
+                    finalConfig = JSON.parse(savedConfig);
+                    configSource = '저장된 설정';
+                } catch (error) {
+                    console.error('저장된 설정 파싱 실패:', error);
+                }
+            } else if (autoConfig) {
+                finalConfig = autoConfig;
+                configSource = '자동 감지';
+            }
+            
+            if (finalConfig && finalConfig.username && finalConfig.repo) {
+                console.log('설정 사용 (' + configSource + '):', finalConfig);
+                
+                githubConfig = finalConfig;
+                dataUrl = 'https://raw.githubusercontent.com/' + finalConfig.username + '/' + finalConfig.repo + '/main/grade-data.json';
+                
+                // localStorage에 저장 (다음에 더 빠르게 로드하기 위해)
+                localStorage.setItem('githubConfig', JSON.stringify(githubConfig));
+                localStorage.setItem('dataUrl', dataUrl);
+                
+                console.log('데이터 로드 시작...');
+                // 약간의 지연 후 데이터 로드 시도
+                setTimeout(function() {
+                    loadDataFromGitHub();
+                }, 1000);
+                
+            } else {
+                console.log('설정을 찾을 수 없음');
+                updateDataStatus('GitHub 설정이 필요합니다. 관리자 탭에서 설정해주세요.');
+            }
+            
+            updateStudentTab();
+        };
+    </script>
+</body>
+</html>
