@@ -1041,8 +1041,8 @@
                 var recentRatios = ratios.slice(-4);
                 var recentAvg = recentRatios.reduce((a, b) => a + b) / recentRatios.length;
                 
-                // 기존 방식: 최근 4회 평균 50% 미만
-                var basicWeakness = recentAvg < 50;
+                // 기존 방식: 최근 4회 평균 65% 미만
+                var basicWeakness = recentAvg < 65;
                 
                 // 다층 분석 기준
                 var criteria = {
@@ -1053,7 +1053,7 @@
                 };
                 
                 var criteriaCount = Object.values(criteria).filter(Boolean).length;
-                var isMultiLayerWeakness = criteriaCount >= 2;
+                var isMultiLayerWeakness = criteriaCount >= 1;  // 1개 이상 기준 충족
                 
                 if (basicWeakness || isMultiLayerWeakness) {
                     var description = '';
@@ -1062,6 +1062,7 @@
                         description = "최근 4회 평균 " + Math.round(recentAvg * 10) / 10 + "%로 기준점 미달";
                     } else {
                         var reasons = [];
+                        if (criteria.absoluteLow) reasons.push("절대적 저조");
                         if (criteria.relativeLow) reasons.push("개인 평균 대비 저조");
                         if (criteria.declining) reasons.push("하락 추세");
                         if (criteria.unstable) reasons.push("성취도 불안정");
