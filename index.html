@@ -323,11 +323,6 @@
             align-items: center;
         }
         
-        .strategy-basic { color: #ef4444; font-weight: bold; }
-        .strategy-stabilize { color: #f59e0b; font-weight: bold; }
-        .strategy-focus { color: #10b981; font-weight: bold; }
-        .strategy-maintain { color: #6366f1; font-weight: bold; }
-        
         .subject-strategy-left {
             flex: 1;
         }
@@ -833,8 +828,8 @@
         </div>
         
         <div class="tab-container">
-            <button class="tab active" id="studentTabBtn">🔍 성적 조회</button>
-            <button class="tab" id="adminTabBtn">⚙️ 관리자</button>
+            <button class="tab active" onclick="switchTab('student')">🔍 성적 조회</button>
+            <button class="tab" onclick="switchTab('admin')">⚙️ 관리자</button>
         </div>
         
         <!-- 학생 조회 탭 -->
@@ -854,7 +849,7 @@
             <div class="search-section">
                 <div class="search-box">
                     <input type="text" id="searchInput" class="search-input" placeholder="출결번호를 입력하세요 (예: 3188)" maxlength="4">
-                    <button class="search-btn" id="searchBtn">🔍 조회</button>
+                    <button onclick="searchStudent()" class="search-btn" id="searchBtn">🔍 조회</button>
                 </div>
             </div>
             
@@ -904,10 +899,10 @@
             <div id="adminAuthSection" class="admin-check">
                 <h3>🔐 관리자 인증</h3>
                 <p>관리자 기능을 사용하려면 비밀번호를 입력해주세요.</p>
-                <input type="password" id="adminPassword" class="admin-password" placeholder="관리자 비밀번호를 입력하세요">
+                <input type="password" id="adminPassword" class="admin-password" placeholder="관리자 비밀번호를 입력하세요" onkeypress="if(event.key==='Enter') checkAdminPassword()">
                 <br>
-                <button id="adminAuthBtn" class="admin-btn">🔑 인증</button>
-                <button id="adminResetBtn" class="admin-btn" style="background: #dc3545; color: white;">🔄 초기화</button>
+                <button onclick="checkAdminPassword()" class="admin-btn">🔑 인증</button>
+                <button onclick="resetAdminAccess()" class="admin-btn" style="background: #dc3545; color: white;">🔄 초기화</button>
                 
                 <p style="margin-top: 15px; font-size: 0.9em;">
                     <strong>📌 관리자 비밀번호:</strong> teacher123
@@ -926,8 +921,8 @@
                 <input type="text" id="githubRepo" class="setup-input" placeholder="저장소 이름 (예: grade-data)" autocomplete="off">
                 <input type="password" id="githubToken" class="setup-input" placeholder="GitHub Personal Access Token (선택사항)">
                 
-                <button id="saveGitHubBtn" class="setup-btn">설정 저장</button>
-                <button id="testGitHubBtn" class="setup-btn">연결 테스트</button>
+                <button onclick="saveGitHubConfig()" class="setup-btn">설정 저장</button>
+                <button onclick="testGitHubConnection()" class="setup-btn">연결 테스트</button>
                 
                 <p style="margin-top: 15px; font-size: 0.9em;">
                     <strong>📌 GitHub Token 발급 방법:</strong><br>
@@ -950,8 +945,8 @@
                     <h3>📁 엑셀 파일 업로드</h3>
                     <p>파일을 드래그앤드롭하거나 아래 버튼을 클릭하세요</p>
                     <input type="file" id="fileInput" accept=".xlsx,.xls" style="display: none;">
-                    <button class="upload-btn" id="fileSelectBtn">파일 선택</button>
-                    <button class="upload-btn" id="processBtn" disabled>GitHub에 업로드</button>
+                    <button class="upload-btn" onclick="document.getElementById('fileInput').click()">파일 선택</button>
+                    <button class="upload-btn" onclick="processFileAndUpload()" id="processBtn" disabled>GitHub에 업로드</button>
                 </div>
             </div>
             
@@ -977,15 +972,27 @@
         
         var maxScores = {}; // 하드코딩된 값 제거, 엑셀에서 추출한 값만 사용
 
-        // 전략 클래스 반환 함수
-        function getStrategyClass(strategy) {
-            if (strategy.includes('기본기 보강')) return 'strategy-basic';
-            if (strategy.includes('안정화')) return 'strategy-stabilize';
-            if (strategy.includes('실수 방지')) return 'strategy-focus';
-            if (strategy.includes('현재 수준 유지')) return 'strategy-maintain';
-            return '';
+        // 전략 색상 및 아이콘 함수
+        function getStrategyColor(strategy) {
+            switch(strategy) {
+                case '기본기 보강 필요': return '#ef4444';  // 빨간색
+                case '안정화 필요': return '#f59e0b';       // 주황색
+                case '실수 방지 집중': return '#10b981';    // 녹색
+                case '현재 수준 유지': return '#6366f1';    // 보라색
+                default: return 'rgba(255,255,255,0.8)';
+            }
         }
         
+        function getStrategyIcon(strategy) {
+            switch(strategy) {
+                case '기본기 보강 필요': return '🔴';
+                case '안정화 필요': return '🟠';
+                case '실수 방지 집중': return '🟢';
+                case '현재 수준 유지': return '🟣';
+                default: return '⚪';
+            }
+        }
+
         // 분석 함수
         function generateAIAnalysis(student) {
             console.log('분석 시작:', student.name);
@@ -1450,49 +1457,6 @@
                         ${analysis.strengths.length > 0 ? 
                             analysis.strengths.map((s, i) => `
                                 <div style="margin: 8px 0;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span>${i + 1}. ${s.subject}</span>
-                                        <span style="font-weight: bold; color: #10b981;">${s.average}%</span>
-                                    </div>
-                                    <div class="progress-bar-container">
-                                        <div class="progress-bar-fill grade-excellent" style="width: ${s.average}%"></div>
-                                    </div>
-                                </div>
-                            `).join('') : 
-                            '<p style="color: rgba(255,255,255,0.8);">강점 과목을 분석하려면 더 많은 데이터가 필요합니다.</p>'
-                        }
-                    </div>
-                </div>
-                
-                <div class="analysis-grid">
-                    <div class="analysis-card">
-                        <h4>⚠️ 개선 필요 과목</h4>
-                        ${analysis.weaknesses.length > 0 ? 
-                            analysis.weaknesses.map((w, i) => `
-                                <div style="margin: 8px 0;">
-                                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span>${i + 1}. ${w.subject}</span>
-                                        <span style="font-weight: bold; color: #f87171; font-size: 0.9em;">${w.average}%</span>
-                                    </div>
-                                    <div style="font-size: 0.8em; color: rgba(255,255,255,0.8); margin-top: 4px;">
-                                        ${w.description}
-                                    </div>
-                                    <div class="progress-bar-container">
-                                        <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
-                                    </div>
-                                </div>
-                            `).join('') : 
-                            '<p style="color: rgba(255,255,255,0.8);">모든 과목이 양호한 상태입니다.</p>'
-                        }
-                    </div>
-                    
-                    <div class="analysis-card">
-                        <h4>📈 성적 추이 분석</h4>
-                        ${analysis.trends.length > 0 ? 
-                            analysis.trends.map(t => `
-                                <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
-                                    <span class="trend-${t.type}">${t.type === 'up' ? '📈' : '📉'}</span>
-                                    <span style="flex: 1;">${t.subject}</span>
                                     <div style="display: flex; flex-direction: column; align-items: end;">
                                         <span style="font-weight: bold; color: ${t.type === 'up' ? '#10b981' : '#f87171'};">
                                             ${t.intensity}
@@ -1539,10 +1503,10 @@
                         <div class="target-analysis">
                             <div class="target-header">
                                 <div>
-                                    <div class="target-grade" style="font-size: 1.4em; margin-bottom: 8px;">${strategy.targetGrade}등급 달성 전략</div>
-                                    <div style="font-size: 1em; opacity: 0.9; line-height: 1.4;">
-                                        목표 점수: <span style="font-weight: bold; color: #4ade80;">${strategy.targetScore}점</span> 이상<br>
-                                        현재 평균 대비: <span style="font-weight: bold; color: ${strategy.neededPoints > 0 ? '#f87171' : '#4ade80'};">${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점</span> 필요
+                                    <div class="target-grade">${strategy.targetGrade}등급 달성 전략</div>
+                                    <div style="font-size: 1.0em; font-weight: 500; color: rgba(255,255,255,0.95); margin-top: 8px;">
+                                        목표 점수: <span style="font-weight: bold; color: #4ade80;">${strategy.targetScore}점 이상</span> 
+                                        (현재 평균 대비 <span style="font-weight: bold; color: ${strategy.neededPoints > 0 ? '#f87171' : '#4ade80'};">${strategy.neededPoints > 0 ? '+' : ''}${strategy.neededPoints}점</span>)
                                     </div>
                                 </div>
                                 <div class="target-possibility ${possibilityClass}">
@@ -1559,9 +1523,8 @@
                                         <div class="subject-strategy-item">
                                             <div class="subject-strategy-left">
                                                 <div class="subject-name">${i + 1}. ${subj.subject}</div>
-                                                <div class="subject-detail">
-                                                    성취도 ${subj.currentAvg}% 
-                                                    (<span class="${getStrategyClass(subj.strategy)}">${subj.strategy}</span>)
+                                                <div class="subject-detail" style="color: ${getStrategyColor(subj.strategy)}; font-weight: 500;">
+                                                    성취도 ${subj.currentAvg}% (${getStrategyIcon(subj.strategy)} ${subj.strategy})
                                                 </div>
                                             </div>
                                             <div class="subject-strategy-right">
@@ -1903,6 +1866,39 @@
                 });
         }
 
+        // 드래그앤드롭 이벤트 설정
+        var uploadArea = document.getElementById('uploadArea');
+        var fileInput = document.getElementById('fileInput');
+        var processBtn = document.getElementById('processBtn');
+        
+        if (uploadArea) {
+            uploadArea.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', function(e) {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                var files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    processBtn.disabled = false;
+                }
+            });
+        }
+        
+        if (fileInput) {
+            fileInput.addEventListener('change', function() {
+                processBtn.disabled = !fileInput.files.length;
+            });
+        }
+
         function processFileAndUpload() {
             if (!isAdminAuthenticated) {
                 showStatus('❌ 관리자 인증이 필요합니다.', 'error');
@@ -2140,4 +2136,47 @@
                                 if (subject.includes('화법')) {
                                     var forcedMax = 22;
                                     if (sheetName === '모클5회' || sheetName === '모클4회') {
-                                        forcedMax = 13;
+                                        ="display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${i + 1}. ${s.subject}</span>
+                                        <span style="font-weight: bold; color: #10b981;">${s.average}%</span>
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar-fill grade-excellent" style="width: ${s.average}%"></div>
+                                    </div>
+                                </div>
+                            `).join('') : 
+                            '<p style="color: rgba(255,255,255,0.8);">강점 과목을 분석하려면 더 많은 데이터가 필요합니다.</p>'
+                        }
+                    </div>
+                </div>
+                
+                <div class="analysis-grid">
+                    <div class="analysis-card">
+                        <h4>⚠️ 개선 필요 과목</h4>
+                        ${analysis.weaknesses.length > 0 ? 
+                            analysis.weaknesses.map((w, i) => `
+                                <div style="margin: 8px 0;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span>${i + 1}. ${w.subject}</span>
+                                        <span style="font-weight: bold; color: #f87171; font-size: 0.9em;">${w.average}%</span>
+                                    </div>
+                                    <div style="font-size: 0.8em; color: rgba(255,255,255,0.8); margin-top: 4px;">
+                                        ${w.description}
+                                    </div>
+                                    <div class="progress-bar-container">
+                                        <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
+                                    </div>
+                                </div>
+                            `).join('') : 
+                            '<p style="color: rgba(255,255,255,0.8);">모든 과목이 양호한 상태입니다.</p>'
+                        }
+                    </div>
+                    
+                    <div class="analysis-card">
+                        <h4>📈 성적 추이 분석</h4>
+                        ${analysis.trends.length > 0 ? 
+                            analysis.trends.map(t => `
+                                <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
+                                    <span class="trend-${t.type}">${t.type === 'up' ? '📈' : '📉'}</span>
+                                    <span style="flex: 1;">${t.subject}</span>
+                                    <div style
