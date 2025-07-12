@@ -950,58 +950,24 @@
             });
             strengths.sort((a, b) => b.average - a.average);
             
-            // 약점 과목 찾기 (최근 4회 데이터에서 평균 50% 미만)
-            var weaknesses = [];
-            Object.keys(subjectRatios).forEach(function(subject) {
-                var ratios = subjectRatios[subject];
-                if (ratios.length > 0) {
-                    // 최근 4회 데이터만 사용
-                    var recentRatios = ratios.slice(-4);
-                    var recentAvg = recentRatios.reduce((a, b) => a + b) / recentRatios.length;
-                    
-                    if (recentAvg < 50) {
-                        weaknesses.push({
-                            subject: subject,
-                            average: Math.round(recentAvg * 10) / 10,
-                            recentData: recentRatios.length + '회 평균'
-                        });
-                    }
-                }
-            });
-            weaknesses.sort((a, b) => a.average - b.average);
+            // 개선 필요 과목 분석 (기존 + 다층 분석)
+            var weaknesses = analyzeWeaknesses(subjectRatios, subjectAverages);
             
-            // 성적 추이 분석 (선형회귀)
+            // 성적 추이 분석 (하이브리드 접근법)
             var trends = [];
             Object.keys(subjectRatios).forEach(function(subject) {
                 var ratios = subjectRatios[subject];
                 if (ratios.length >= 3) {
-                    // 선형회귀 계산
-                    var n = ratios.length;
-                    var sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+                    var hybridResult = calculateHybridTrend(ratios);
                     
-                    for (var i = 0; i < n; i++) {
-                        sumX += i;
-                        sumY += ratios[i];
-                        sumXY += i * ratios[i];
-                        sumXX += i * i;
-                    }
-                    
-                    var slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-                    var intercept = (sumY - slope * sumX) / n;
-                    
-                    // 기울기를 백분율로 변환 (시험당 변화율)
-                    var trendPerTest = Math.round(slope * 10) / 10;
-                    
-                    // 전체 기간 동안의 총 변화량
-                    var totalChange = Math.round(slope * (n - 1) * 10) / 10;
-                    
-                    if (Math.abs(totalChange) > 5) { // 총 5% 이상 변화 시만 추세로 인정
+                    if (hybridResult && Math.abs(hybridResult.shortTermTrend) > 5) {
                         trends.push({
                             subject: subject,
-                            slope: trendPerTest,
-                            totalChange: totalChange,
-                            type: totalChange > 0 ? 'up' : 'down',
-                            confidence: Math.min(Math.abs(totalChange) / 10, 1) // 신뢰도 (0-1)
+                            shortTermTrend: hybridResult.shortTermTrend,
+                            stability: hybridResult.stability,
+                            pattern: hybridResult.pattern,
+                            type: hybridResult.shortTermTrend > 0 ? 'up' : 'down',
+                            intensity: getIntensityDescription(hybridResult.shortTermTrend)
                         });
                     }
                 }
@@ -1014,7 +980,7 @@
                 recommendations.push({
                     priority: "높음",
                     action: weaknesses[0].subject + " 집중 학습",
-                    reason: "최근 4회 평균 " + weaknesses[0].average + "%로 가장 낮은 성취도"
+                    reason: weaknesses[0].description
                 });
             }
             
@@ -1027,11 +993,11 @@
             }
             
             if (trends.filter(t => t.type === 'up').length > 0) {
-                var upTrend = trends.filter(t => t.type === 'up').sort((a, b) => b.totalChange - a.totalChange)[0];
+                var upTrend = trends.filter(t => t.type === 'up').sort((a, b) => b.shortTermTrend - a.shortTermTrend)[0];
                 recommendations.push({
                     priority: "낮음",
                     action: upTrend.subject + " 상승세 유지",
-                    reason: "전체 기간 동안 " + upTrend.totalChange + "% 향상 추세"
+                    reason: upTrend.intensity + " 향상 추세"
                 });
             }
             
@@ -1060,6 +1026,148 @@
                 trends: trends,
                 recommendations: recommendations
             };
+        }
+        
+        // 다층 분석 방식으로 개선 필요 과목 찾기
+        function analyzeWeaknesses(subjectRatios, subjectAverages) {
+            var weaknesses = [];
+            var studentAvg = Object.values(subjectAverages).reduce((a, b) => a + b, 0) / Object.values(subjectAverages).length;
+            
+            Object.keys(subjectRatios).forEach(function(subject) {
+                var ratios = subjectRatios[subject];
+                if (ratios.length === 0) return;
+                
+                // 최근 4회 데이터
+                var recentRatios = ratios.slice(-4);
+                var recentAvg = recentRatios.reduce((a, b) => a + b) / recentRatios.length;
+                
+                // 기존 방식: 최근 4회 평균 50% 미만
+                var basicWeakness = recentAvg < 50;
+                
+                // 다층 분석 기준
+                var criteria = {
+                    absoluteLow: recentAvg < 50,                          // 절대적 저조
+                    relativeLow: recentAvg < studentAvg * 0.8,            // 개인 평균 대비 저조 
+                    declining: calculateSimpleTrend(ratios) < -10,        // 하락 추세
+                    unstable: calculateStability(ratios) < 70             // 불안정
+                };
+                
+                var criteriaCount = Object.values(criteria).filter(Boolean).length;
+                var isMultiLayerWeakness = criteriaCount >= 2;
+                
+                if (basicWeakness || isMultiLayerWeakness) {
+                    var description = '';
+                    
+                    if (basicWeakness) {
+                        description = "최근 4회 평균 " + Math.round(recentAvg * 10) / 10 + "%로 기준점 미달";
+                    } else {
+                        var reasons = [];
+                        if (criteria.relativeLow) reasons.push("개인 평균 대비 저조");
+                        if (criteria.declining) reasons.push("하락 추세");
+                        if (criteria.unstable) reasons.push("성취도 불안정");
+                        description = reasons.join(', ') + " (최근 4회: " + Math.round(recentAvg * 10) / 10 + "%)";
+                    }
+                    
+                    weaknesses.push({
+                        subject: subject,
+                        average: Math.round(recentAvg * 10) / 10,
+                        isBasicWeakness: basicWeakness,
+                        isMultiLayerWeakness: isMultiLayerWeakness,
+                        criteriaCount: criteriaCount,
+                        description: description,
+                        urgency: basicWeakness ? 'high' : criteriaCount >= 3 ? 'high' : 'medium'
+                    });
+                }
+            });
+            
+            // 우선순위 정렬: 기존 방식 우선, 그 다음 다층 분석 점수
+            weaknesses.sort((a, b) => {
+                if (a.isBasicWeakness !== b.isBasicWeakness) {
+                    return b.isBasicWeakness - a.isBasicWeakness;
+                }
+                return b.criteriaCount - a.criteriaCount;
+            });
+            
+            return weaknesses;
+        }
+        
+        // 하이브리드 추세 분석
+        function calculateHybridTrend(ratios) {
+            if (ratios.length < 4) return null;
+            
+            // 1. 최근 4회 vs 이전 데이터 비교
+            var recent4 = ratios.slice(-4);
+            var earlier = ratios.slice(0, -4);
+            
+            var recentAvg = recent4.reduce((a, b) => a + b) / recent4.length;
+            var earlierAvg = earlier.length > 0 ? 
+                earlier.reduce((a, b) => a + b) / earlier.length : recentAvg;
+            
+            var shortTermTrend = Math.round((recentAvg - earlierAvg) * 10) / 10;
+            
+            // 2. 최고점 대비 현재 위치
+            var maxScore = Math.max(...ratios);
+            var currentScore = ratios[ratios.length - 1];
+            var peakMaintenance = Math.round((currentScore / maxScore) * 100);
+            
+            // 3. 안정성 계산
+            var avg = ratios.reduce((a, b) => a + b) / ratios.length;
+            var variance = ratios.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ratios.length;
+            var stability = Math.max(0, Math.round((100 - Math.sqrt(variance)) * 10) / 10);
+            
+            // 4. 패턴 인식
+            var pattern = determinePattern(ratios);
+            
+            return {
+                shortTermTrend: shortTermTrend,
+                peakMaintenance: peakMaintenance,
+                stability: stability,
+                pattern: pattern
+            };
+        }
+        
+        // 간단한 추세 계산 (다층 분석용)
+        function calculateSimpleTrend(ratios) {
+            if (ratios.length < 3) return 0;
+            var recent = ratios.slice(-3);
+            var earlier = ratios.slice(0, -3);
+            if (earlier.length === 0) return 0;
+            
+            var recentAvg = recent.reduce((a, b) => a + b) / recent.length;
+            var earlierAvg = earlier.reduce((a, b) => a + b) / earlier.length;
+            return recentAvg - earlierAvg;
+        }
+        
+        // 안정성 계산
+        function calculateStability(ratios) {
+            var avg = ratios.reduce((a, b) => a + b) / ratios.length;
+            var variance = ratios.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / ratios.length;
+            return Math.max(0, 100 - Math.sqrt(variance));
+        }
+        
+        // 패턴 결정
+        function determinePattern(ratios) {
+            var improvements = 0;
+            var declines = 0;
+            
+            for (var i = 1; i < ratios.length; i++) {
+                var change = ratios[i] - ratios[i-1];
+                if (change > 3) improvements++;
+                else if (change < -3) declines++;
+            }
+            
+            if (improvements > declines) return 'improving';
+            else if (declines > improvements) return 'declining';
+            else return 'stable';
+        }
+        
+        // 강도 표현 함수
+        function getIntensityDescription(trendValue) {
+            var abs = Math.abs(trendValue);
+            if (abs >= 20) return trendValue > 0 ? '뚜렷한 급상승' : '뚜렷한 급락';
+            else if (abs >= 15) return trendValue > 0 ? '급상승' : '급락';
+            else if (abs >= 10) return trendValue > 0 ? '상승' : '하락';
+            else return trendValue > 0 ? '완만한 상승' : '완만한 하락';
         }
         
         function displayAIAnalysis(analysis) {
@@ -1098,13 +1206,16 @@
                 
                 <div class="analysis-grid">
                     <div class="analysis-card">
-                        <h4>⚠️ 개선 필요 과목 (최근 4회)</h4>
+                        <h4>⚠️ 개선 필요 과목</h4>
                         ${analysis.weaknesses.length > 0 ? 
                             analysis.weaknesses.map((w, i) => `
                                 <div style="margin: 8px 0;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
                                         <span>${i + 1}. ${w.subject}</span>
-                                        <span style="font-weight: bold; color: #f87171;">${w.average}% (${w.recentData})</span>
+                                        <span style="font-weight: bold; color: #f87171; font-size: 0.9em;">${w.average}%</span>
+                                    </div>
+                                    <div style="font-size: 0.8em; color: rgba(255,255,255,0.8); margin-top: 4px;">
+                                        ${w.description}
                                     </div>
                                     <div class="progress-bar-container">
                                         <div class="progress-bar-fill grade-poor" style="width: ${w.average}%"></div>
@@ -1116,7 +1227,7 @@
                     </div>
                     
                     <div class="analysis-card">
-                        <h4>📈 성적 추이 분석 (선형회귀)</h4>
+                        <h4>📈 성적 추이 분석</h4>
                         ${analysis.trends.length > 0 ? 
                             analysis.trends.map(t => `
                                 <div style="margin: 8px 0; display: flex; align-items: center; gap: 8px;">
@@ -1124,10 +1235,10 @@
                                     <span style="flex: 1;">${t.subject}</span>
                                     <div style="display: flex; flex-direction: column; align-items: end;">
                                         <span style="font-weight: bold; color: ${t.type === 'up' ? '#10b981' : '#f87171'};">
-                                            ${t.totalChange > 0 ? '+' : ''}${t.totalChange}%
+                                            ${t.intensity}
                                         </span>
-                                        <span style="font-size: 0.8em; opacity: 0.8;">
-                                            시험당 ${t.slope > 0 ? '+' : ''}${t.slope}%
+                                        <span style="font-size: 0.75em; opacity: 0.8;">
+                                            (${t.shortTermTrend > 0 ? '+' : ''}${t.shortTermTrend}%)
                                         </span>
                                     </div>
                                 </div>
